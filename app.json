@@ -19,11 +19,6 @@
       },
       "package": "com.cryptovault852.gogocar"
     },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
-    },
     "plugins": [
       "expo-router",
       "expo-secure-store"
@@ -41,6 +36,7 @@
     },
     "updates": {
       "url": "https://u.expo.dev/81492ef0-cf32-4996-b0fd-ae6aa0bf4a1c",
+      "checkAutomatically": "ON_LOAD",
       "requestHeaders": {
         "expo-channel-name": "preview"
       }
