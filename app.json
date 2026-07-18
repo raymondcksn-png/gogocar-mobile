@@ -8,7 +8,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "gogocar",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.cryptovault852.gogocar"
@@ -41,7 +40,10 @@
       }
     },
     "updates": {
-      "url": "https://u.expo.dev/81492ef0-cf32-4996-b0fd-ae6aa0bf4a1c"
+      "url": "https://u.expo.dev/81492ef0-cf32-4996-b0fd-ae6aa0bf4a1c",
+      "requestHeaders": {
+        "expo-channel-name": "preview"
+      }
     },
     "runtimeVersion": "1.0.0"
   }
