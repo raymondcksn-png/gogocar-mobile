@@ -249,12 +249,12 @@ export default function HomeScreen() {
         <View style={styles.quickGrid}>
           {QUICK_PRICES.map(p => (
             <TouchableOpacity
-              key={p}
+              key={p.label}
               style={styles.quickBtn}
               activeOpacity={0.6}
-              onPress={() => router.push(`/buy?price=${encodeURIComponent(p)}`)}
+              onPress={() => router.push(`/buy?minPrice=${p.min ?? ''}&maxPrice=${p.max ?? ''}`)}
             >
-              <Text style={styles.quickBtnText}>{p}</Text>
+              <Text style={styles.quickBtnText}>{p.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -263,12 +263,12 @@ export default function HomeScreen() {
         <View style={styles.quickGrid}>
           {QUICK_AGES.map(p => (
             <TouchableOpacity
-              key={p}
+              key={p.label}
               style={styles.quickBtn}
               activeOpacity={0.6}
-              onPress={() => router.push(`/buy?age=${encodeURIComponent(p)}`)}
+              onPress={() => router.push(`/buy?maxAge=${p.maxAge ?? ''}&minAge=${p.minAge ?? ''}`)}
             >
-              <Text style={styles.quickBtnText}>{p}</Text>
+              <Text style={styles.quickBtnText}>{p.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
