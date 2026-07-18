@@ -6,10 +6,10 @@ import { createTRPCReact } from '@trpc/react-query';
 import { httpBatchLink } from '@trpc/client';
 import superjson from 'superjson';
 import * as SecureStore from 'expo-secure-store';
-import type { AppRouter } from '../../../gogocar20/server/routers';
 
 // ── tRPC React hooks ──────────────────────────────────────────────────────────
-export const trpc = createTRPCReact<AppRouter>();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const trpc = createTRPCReact<any>();
 
 // ── 生產 API 地址 ──────────────────────────────────────────────────────────────
 const API_BASE_URL = 'https://gogocar853.manus.space';
