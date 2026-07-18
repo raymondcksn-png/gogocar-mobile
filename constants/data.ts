@@ -12,18 +12,18 @@ export const APP_BORDER = '#e5e5ea';
 
 // ── 首頁品牌快選 ──────────────────────────────────────────────────────────────
 export const HOME_BRANDS = [
-  { name: 'Toyota', logo: null },
-  { name: 'Honda', logo: null },
-  { name: 'Nissan', logo: null },
-  { name: 'Mazda', logo: null },
-  { name: 'BMW', logo: null },
-  { name: 'Benz', logo: null },
-  { name: 'Audi', logo: null },
-  { name: 'Lexus', logo: null },
-  { name: 'Porsche', logo: null },
-  { name: 'Yamaha', logo: null },
-  { name: 'Honda-Bike', logo: null },
-  { name: '更多', logo: null },
+  { name: 'Toyota', zh: '豐田', logo: null },
+  { name: 'Honda', zh: '本田', logo: null },
+  { name: 'Nissan', zh: '日產', logo: null },
+  { name: 'Mazda', zh: '萬事得', logo: null },
+  { name: 'BMW', zh: 'BMW', logo: null },
+  { name: 'Benz', zh: '平治', logo: null },
+  { name: 'Audi', zh: '奧迪', logo: null },
+  { name: 'Lexus', zh: '凌志', logo: null },
+  { name: 'Porsche', zh: '保時捷', logo: null },
+  { name: 'Yamaha', zh: '雅馬哈', logo: null },
+  { name: 'Honda-Bike', zh: '本田電單', logo: null },
+  { name: '更多', zh: '更多', logo: null },
 ];
 
 // ── 快選價格範圍 ──────────────────────────────────────────────────────────────
