@@ -2,7 +2,7 @@
  * 買車列表頁 — 篩選 + 搜索 + 車源列表
  * API: trpc.vehicle.listPosts + trpc.vehicle.getActiveTags
  */
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput,
   Image, ActivityIndicator, RefreshControl, Dimensions,
@@ -119,26 +119,26 @@ export default function BuyScreen() {
     return map;
   }, [tagsData]);
 
-  const { data, isLoading, refetch } = trpc.vehicle.listPosts.useQuery(
-    {
-      vehicleType: vehicleType || undefined,
-      search: search || undefined,
-      sortBy: sortBy as any,
-      page,
-      pageSize: 20,
-    },
-    {
-      onSuccess: (d: any) => {
-        if (page === 1) {
-          setAllItems(d.items || []);
-        } else {
-          setAllItems(prev => [...prev, ...(d.items || [])]);
-        }
-        setHasMore((d.items || []).length === 20);
-        setRefreshing(false);
-      },
+  const queryParams = useMemo(() => ({
+    vehicleType: vehicleType || undefined,
+    search: search || undefined,
+    sortBy: sortBy as any,
+    page,
+    pageSize: 20,
+  }), [vehicleType, search, sortBy, page]);
+
+  const { data, isLoading, refetch } = trpc.vehicle.listPosts.useQuery(queryParams);
+
+  useEffect(() => {
+    if (!data) return;
+    if (page === 1) {
+      setAllItems(data.items || []);
+    } else {
+      setAllItems(prev => [...prev, ...(data.items || [])]);
     }
-  );
+    setHasMore((data.items || []).length === 20);
+    setRefreshing(false);
+  }, [data, page]);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
