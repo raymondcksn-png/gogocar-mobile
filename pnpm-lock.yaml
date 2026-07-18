@@ -90,6 +90,9 @@ importers:
       '@types/react':
         specifier: ~18.3.12
         version: 18.3.31
+      babel-preset-expo:
+        specifier: ~12.0.7
+        version: 12.0.12(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))
       typescript:
         specifier: ^5.3.3
         version: 5.9.3
@@ -1564,6 +1567,9 @@ packages:
   babel-plugin-react-compiler@1.0.0:
     resolution: {integrity: sha512-Ixm8tFfoKKIPYdCCKYTsqv+Fd4IJ0DQqMyEimo+pxUOMUR9cVPlwTrFt9Avu+3cb6Zp3mAzl+t1MrG2fxxKsxw==}
 
+  babel-plugin-react-native-web@0.19.13:
+    resolution: {integrity: sha512-4hHoto6xaN23LCyZgL9LJZc3olmAxd7b6jDzlZnKXAh4rRAbZRKNBJoOOdp46OBqgy+K0t0guTj5/mhA8inymQ==}
+
   babel-plugin-react-native-web@0.21.2:
     resolution: {integrity: sha512-SPD0J6qjJn8231i0HZhlAGH6NORe+QvRSQM2mwQEzJ2Fb3E4ruWTiiicPlHjmeWShDXLcvoorOCXjeR7k/lyWA==}
 
@@ -1583,6 +1589,17 @@ packages:
     resolution: {integrity: sha512-E/VlAEzRrsLEb2+dv8yp3bo4scof3l9nR4lrld+Iy5NyVqgVYUJnDAmunkhPMisRI32Qc4iRiz425d8vM++2fg==}
     peerDependencies:
       '@babel/core': ^7.0.0 || ^8.0.0-0
+
+  babel-preset-expo@12.0.12:
+    resolution: {integrity: sha512-qAuaGGZIN//DyQVackP7Czr1SMq5dYb5tpu/uQqL/f1bRARb74r+kBWQRLJGxQ3QujsEw13SyAodCZIOUoD6KQ==}
+    peerDependencies:
+      babel-plugin-react-compiler: ^19.0.0-beta-9ee70a1-20241017
+      react-compiler-runtime: ^19.0.0-beta-8a03594-20241020
+    peerDependenciesMeta:
+      babel-plugin-react-compiler:
+        optional: true
+      react-compiler-runtime:
+        optional: true
 
   babel-preset-expo@54.0.12:
     resolution: {integrity: sha512-6xeSkdaixmQhWSYL7tfLu0pOS0BY+8ftwmdNSHtpEFSizrXYZkCjk/B6Dxr+6nwNRihixMcS0aBlWS1wlDl3pw==}
@@ -6164,6 +6181,8 @@ snapshots:
     dependencies:
       '@babel/types': 7.29.7
 
+  babel-plugin-react-native-web@0.19.13: {}
+
   babel-plugin-react-native-web@0.21.2: {}
 
   babel-plugin-syntax-hermes-parser@0.23.1:
@@ -6202,6 +6221,22 @@ snapshots:
       '@babel/plugin-syntax-optional-chaining': 7.8.3(@babel/core@7.29.7)
       '@babel/plugin-syntax-private-property-in-object': 7.14.5(@babel/core@7.29.7)
       '@babel/plugin-syntax-top-level-await': 7.14.5(@babel/core@7.29.7)
+
+  babel-preset-expo@12.0.12(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7)):
+    dependencies:
+      '@babel/plugin-proposal-decorators': 7.29.7(@babel/core@7.29.7)
+      '@babel/plugin-transform-export-namespace-from': 7.29.7(@babel/core@7.29.7)
+      '@babel/plugin-transform-object-rest-spread': 7.29.7(@babel/core@7.29.7)
+      '@babel/plugin-transform-parameters': 7.29.7(@babel/core@7.29.7)
+      '@babel/preset-react': 7.29.7(@babel/core@7.29.7)
+      '@babel/preset-typescript': 7.29.7(@babel/core@7.29.7)
+      '@react-native/babel-preset': 0.76.9(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))
+      babel-plugin-react-native-web: 0.19.13
+      react-refresh: 0.14.2
+    transitivePeerDependencies:
+      - '@babel/core'
+      - '@babel/preset-env'
+      - supports-color
 
   babel-preset-expo@54.0.12(@babel/core@7.29.7)(@babel/runtime@7.29.7)(expo@54.0.36)(react-refresh@0.14.2):
     dependencies:
