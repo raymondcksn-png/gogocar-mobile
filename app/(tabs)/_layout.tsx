@@ -11,7 +11,6 @@ import { Text as SvgText } from 'react-native-svg';
 const APP_ORANGE = '#FF6B00';
 const APP_GRAY = '#8E8E93';
 
-// ── 首頁圖標（房子，填充風格）
 function HomeIcon({ color }: { color: string }) {
   return (
     <Svg width={26} height={26} viewBox="0 0 24 24" fill={color}>
@@ -20,7 +19,6 @@ function HomeIcon({ color }: { color: string }) {
   );
 }
 
-// ── 買車圖標（汽車，填充風格）
 function BuyIcon({ color }: { color: string }) {
   return (
     <Svg width={28} height={28} viewBox="0 0 24 24" fill={color}>
@@ -29,7 +27,6 @@ function BuyIcon({ color }: { color: string }) {
   );
 }
 
-// ── 賣車圖標（汽車+右上角$圓圈，填充風格）
 function SellIcon({ color }: { color: string }) {
   return (
     <Svg width={28} height={28} viewBox="0 0 24 24" fill={color}>
@@ -40,7 +37,6 @@ function SellIcon({ color }: { color: string }) {
   );
 }
 
-// ── 考車圖標（方向盤，填充風格）
 function ExamIcon({ color }: { color: string }) {
   return (
     <Svg width={26} height={26} viewBox="0 0 24 24" fill={color}>
@@ -49,7 +45,6 @@ function ExamIcon({ color }: { color: string }) {
   );
 }
 
-// ── 通關圖標（地球，填充風格）
 function BorderIcon({ color }: { color: string }) {
   return (
     <Svg width={26} height={26} viewBox="0 0 24 24" fill={color}>
@@ -58,7 +53,6 @@ function BorderIcon({ color }: { color: string }) {
   );
 }
 
-// ── 我的圖標（人像，填充風格）
 function ProfileIcon({ color }: { color: string }) {
   return (
     <Svg width={26} height={26} viewBox="0 0 24 24" fill={color}>
@@ -67,7 +61,6 @@ function ProfileIcon({ color }: { color: string }) {
   );
 }
 
-// ── Tab 佈局
 export default function TabLayout() {
   return (
     <Tabs
@@ -92,45 +85,32 @@ export default function TabLayout() {
     >
       <Tabs.Screen
         name="index"
-        options={{
-          title: '首頁',
-          tabBarIcon: ({ color }) => <HomeIcon color={color} />,
-        }}
+        options={{ title: '首頁', tabBarIcon: ({ color }) => <HomeIcon color={color} /> }}
       />
       <Tabs.Screen
         name="buy"
-        options={{
-          title: '買車',
-          tabBarIcon: ({ color }) => <BuyIcon color={color} />,
-        }}
+        options={{ title: '買車', tabBarIcon: ({ color }) => <BuyIcon color={color} /> }}
       />
       <Tabs.Screen
         name="sell"
-        options={{
-          title: '賣車',
-          tabBarIcon: ({ color }) => <SellIcon color={color} />,
-        }}
+        options={{ title: '賣車', tabBarIcon: ({ color }) => <SellIcon color={color} /> }}
       />
       <Tabs.Screen
         name="exam"
-        options={{
-          title: '考車',
-          tabBarIcon: ({ color }) => <ExamIcon color={color} />,
-        }}
+        options={{ title: '考車', tabBarIcon: ({ color }) => <ExamIcon color={color} /> }}
       />
       <Tabs.Screen
         name="border"
-        options={{
-          title: '通關',
-          tabBarIcon: ({ color }) => <BorderIcon color={color} />,
-        }}
+        options={{ title: '通關', tabBarIcon: ({ color }) => <BorderIcon color={color} /> }}
       />
       <Tabs.Screen
         name="profile"
-        options={{
-          title: '我的',
-          tabBarIcon: ({ color }) => <ProfileIcon color={color} />,
-        }}
+        options={{ title: '我的', tabBarIcon: ({ color }) => <ProfileIcon color={color} /> }}
+      />
+      {/* 隱藏 ipoint Tab — 功能入口在「我的」頁面內 */}
+      <Tabs.Screen
+        name="ipoint"
+        options={{ href: null }}
       />
     </Tabs>
   );

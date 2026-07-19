@@ -247,28 +247,28 @@ export default function HomeScreen() {
 
         {/* 價格快選（對照 QUICK_PRICES） */}
         <View style={styles.quickGrid}>
-          {QUICK_PRICES.map(p => (
+          {QUICK_PRICES.map((p: string) => (
             <TouchableOpacity
-              key={p.label}
+              key={p}
               style={styles.quickBtn}
               activeOpacity={0.6}
-              onPress={() => router.push(`/buy?minPrice=${p.min ?? ''}&maxPrice=${p.max ?? ''}`)}
+              onPress={() => router.push(`/buy?price=${encodeURIComponent(p)}` as any)}
             >
-              <Text style={styles.quickBtnText}>{p.label}</Text>
+              <Text style={styles.quickBtnText}>{p}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
         {/* 車齡快選（對照 QUICK_AGES） */}
         <View style={styles.quickGrid}>
-          {QUICK_AGES.map(p => (
+          {QUICK_AGES.map((p: string) => (
             <TouchableOpacity
-              key={p.label}
+              key={p}
               style={styles.quickBtn}
               activeOpacity={0.6}
-              onPress={() => router.push(`/buy?maxAge=${p.maxAge ?? ''}&minAge=${p.minAge ?? ''}`)}
+              onPress={() => router.push(`/buy?age=${encodeURIComponent(p)}` as any)}
             >
-              <Text style={styles.quickBtnText}>{p.label}</Text>
+              <Text style={styles.quickBtnText}>{p}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -283,12 +283,7 @@ export default function HomeScreen() {
               onPress={() => router.push(`/buy?brand=${encodeURIComponent(b.name)}`)}
             >
               <View style={styles.brandLogoWrap}>
-                <Text style={styles.brandInitial}>{b.zh.charAt(0)}</Text>
-                <Image
-                  source={{ uri: b.logo }}
-                  style={styles.brandLogo}
-                  resizeMode="contain"
-                />
+                <Text style={styles.brandInitial}>{b.initial || b.zh.charAt(0)}</Text>
               </View>
               <Text style={styles.brandName}>{b.zh}</Text>
             </TouchableOpacity>
@@ -496,7 +491,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
   },
-  segBtnText: { fontSize: 13, fontWeight: '600', color: '#8e8e93' },
+  segBtnText: { fontSize: 15, fontWeight: '600', color: '#8e8e93' },
   segBtnTextActive: { color: '#1c1c1e' },
 
   // 快選按鈕
@@ -505,7 +500,7 @@ const styles = StyleSheet.create({
     flex: 1, height: 34, backgroundColor: '#f5f5f7',
     borderRadius: 9, justifyContent: 'center', alignItems: 'center',
   },
-  quickBtnText: { fontSize: 12, fontWeight: '500', color: '#3c3c43' },
+  quickBtnText: { fontSize: 14, fontWeight: '500', color: '#3c3c43' },
 
   // 品牌網格
   brandGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginTop: 8 },
@@ -518,7 +513,7 @@ const styles = StyleSheet.create({
   },
   brandInitial: { position: 'absolute', fontSize: 16, fontWeight: '700', color: '#9ca3af' },
   brandLogo: { width: 36, height: 36 },
-  brandName: { fontSize: 11, color: '#3c3c43', fontWeight: '500' },
+  brandName: { fontSize: 13, color: '#3c3c43', fontWeight: '500' },
   moreBtn: { alignItems: 'center', paddingVertical: 12 },
   moreBtnText: { fontSize: 12, color: '#8e8e93' },
 
@@ -531,7 +526,7 @@ const styles = StyleSheet.create({
     padding: 14, minHeight: 88,
   },
   categoryTextWrap: { flex: 1 },
-  categoryTitle: { fontSize: 15, fontWeight: '600', color: '#1c1c1e', lineHeight: 20 },
+  categoryTitle: { fontSize: 17, fontWeight: '600', color: '#1c1c1e', lineHeight: 22 },
   categorySubtitle: { fontSize: 11, color: APP_ORANGE, fontWeight: '500', marginTop: 4 },
   categoryImg: { width: 82, height: 56, borderRadius: 6, marginLeft: 10 },
 
@@ -581,12 +576,12 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   vehicleInfo: { flex: 1, justifyContent: 'space-between', paddingVertical: 2 },
-  vehicleTitle: { fontSize: 14, fontWeight: '500', color: '#1c1c1e', lineHeight: 19, letterSpacing: -0.2 },
+  vehicleTitle: { fontSize: 15, fontWeight: '500', color: '#1c1c1e', lineHeight: 20, letterSpacing: -0.2 },
   vehicleMeta: { fontSize: 11, color: '#8e8e93', marginTop: 3 },
   tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
   tagChip: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
   tagChipText: { color: '#fff', fontSize: 10, fontWeight: '500' },
-  vehiclePrice: { fontSize: 16, fontWeight: '700', color: APP_ORANGE, letterSpacing: -0.3, marginTop: 4 },
+  vehiclePrice: { fontSize: 17, fontWeight: '700', color: APP_ORANGE, letterSpacing: -0.3, marginTop: 4 },
 
   // 底部
   noMore: { textAlign: 'center', paddingVertical: 16, color: '#8e8e93', fontSize: 13 },
