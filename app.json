@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "GoGoCar",
+    "slug": "gogocar-mobile",
+    "owner": "cryptovault852",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "gogocar",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cryptovault852.gogocar"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#FF6B00"
+      },
+      "package": "com.cryptovault852.gogocar"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "81492ef0-cf32-4996-b0fd-ae6aa0bf4a1c"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/81492ef0-cf32-4996-b0fd-ae6aa0bf4a1c",
+      "checkAutomatically": "ON_LOAD",
+      "requestHeaders": {
+        "expo-channel-name": "preview"
+      }
+    },
+    "runtimeVersion": "1.0.0"
+  }
+}
