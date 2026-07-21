@@ -552,8 +552,9 @@ const styles = StyleSheet.create({
   brandItem: { width: (SCREEN_W - 32 - 48) / 4, alignItems: 'center', gap: 6 },
   brandLogoWrap: {
     width: 52, height: 52, borderRadius: 26,
-    backgroundColor: '#f5f5f7', justifyContent: 'center', alignItems: 'center',
-    borderWidth: 0.5, borderColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: '#ffffff', justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.10, shadowRadius: 4, elevation: 3,
     overflow: 'hidden',
   },
   brandInitial: { position: 'absolute', fontSize: 16, fontWeight: '700', color: '#9ca3af' },
@@ -573,7 +574,7 @@ const styles = StyleSheet.create({
   categoryTextWrap: { flex: 1 },
   categoryTitle: { fontSize: 17, fontWeight: '600', color: '#1c1c1e', lineHeight: 22 },
   categorySubtitle: { fontSize: 11, color: APP_ORANGE, fontWeight: '500', marginTop: 4 },
-  categoryImg: { width: 82, height: 56, borderRadius: 6, marginLeft: 10 },
+  categoryImg: { width: 82, height: 56, borderRadius: 6, marginLeft: 10, backgroundColor: '#ffffff' },
 
   // Banner
   bannerWrap: { height: 180, marginTop: 8, backgroundColor: '#fff', overflow: 'hidden', position: 'relative' },
