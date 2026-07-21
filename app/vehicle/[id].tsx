@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { trpc, resolveImageUrl } from '../../lib/trpc';
+import { trpc, resolveImageUrl, API_BASE_URL } from '../../lib/trpc';
 import { APP_ORANGE } from '../../constants/data';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -141,14 +141,14 @@ export default function VehicleDetailScreen() {
 
   const handleShare = async () => {
     try {
-      await Share.share({ message: `GoGoCar 車源：${title}\nhttps://gogocar853.manus.space/app/vehicle/${id}` });
+      await Share.share({ message: `GoGoCar 車源：${title}\n${API_BASE_URL}/app/vehicle/${id}` });
     } catch {}
   };
 
   const handleWhatsApp = () => {
     const msgText = quickMsg
-      ? `你好，我想查詢這輛車：https://gogocar853.manus.space/app/vehicle/${id}\n${quickMsg}`
-      : `你好，我想查詢這輛車：https://gogocar853.manus.space/app/vehicle/${id}`;
+      ? `你好，我想查詢這輛車：${API_BASE_URL}/app/vehicle/${id}\n${quickMsg}`
+      : `你好，我想查詢這輛車：${API_BASE_URL}/app/vehicle/${id}`;
     const phone = sellerPhone?.replace(/\D/g, '');
     const url = phone
       ? `https://wa.me/853${phone}?text=${encodeURIComponent(msgText)}`
