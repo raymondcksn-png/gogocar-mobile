@@ -6,15 +6,24 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ActivityIndicator, Alert, ScrollView,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { trpc } from '../../lib/trpc';
 import { useAuth } from '../../contexts/AuthContext';
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../../constants/data';
 
+const AREA_CODES = [
+  { code: '+853', label: '+853 澳門' },
+  { code: '+852', label: '+852 香港' },
+  { code: '+86',  label: '+86 中國大陸' },
+];
+
 export default function RegisterScreen() {
   const router = useRouter();
   const { setAuth } = useAuth();
+  const [areaCode, setAreaCode] = useState('+853');
+  const [showAreaPicker, setShowAreaPicker] = useState(false);
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPwd, setConfirmPwd] = useState('');
@@ -70,26 +79,26 @@ export default function RegisterScreen() {
 
   const handleSendOtp = () => {
     const cleaned = phone.trim().replace(/\s/g, '');
-    if (!cleaned || cleaned.length < 8) {
+    if (!cleaned || cleaned.length < 6) {
       Alert.alert('提示', '請先輸入正確的手機號碼');
       return;
     }
     setSendingOtp(true);
-    sendOtpMutation.mutate({ areaCode: '+853', phone: cleaned });
+    sendOtpMutation.mutate({ areaCode: areaCode as '+853' | '+852' | '+86', phone: cleaned });
   };
 
   const handleRegister = () => {
     const cleaned = phone.trim().replace(/\s/g, '');
-    if (!cleaned || cleaned.length < 8) { Alert.alert('提示', '請輸入正確的手機號碼'); return; }
+    if (!cleaned || cleaned.length < 6) { Alert.alert('提示', '請輸入正確的手機號碼'); return; }
     if (password.length < 6) { Alert.alert('提示', '密碼最少 6 位'); return; }
     if (password !== confirmPwd) { Alert.alert('提示', '兩次密碼不一致'); return; }
     if (otp.length !== 6) { Alert.alert('提示', '請輸入 6 位驗證碼'); return; }
     setRegistering(true);
-    registerMutation.mutate({ areaCode: '+853', phone: cleaned, password, otp });
+    registerMutation.mutate({ areaCode: areaCode as '+853' | '+852' | '+86', phone: cleaned, password, otp });
   };
 
-  const canSend = phone.trim().length >= 8 && countdown === 0 && !sendingOtp;
-  const canRegister = phone.trim().length >= 8 && password.length >= 6 && confirmPwd === password && otp.length === 6 && !registering;
+  const canSend = phone.trim().length >= 6 && countdown === 0 && !sendingOtp;
+  const canRegister = phone.trim().length >= 6 && password.length >= 6 && confirmPwd === password && otp.length === 6 && !registering;
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -103,12 +112,15 @@ export default function RegisterScreen() {
         <Text style={styles.subtitle}>使用手機號碼註冊 GoGoCar</Text>
 
         <View style={styles.formWrap}>
-          {/* 手機號 */}
+          {/* 手機號（含區號選擇） */}
           <Text style={styles.label}>手機號碼</Text>
           <View style={styles.phoneRow}>
-            <View style={styles.areaCode}><Text style={styles.areaCodeText}>+853</Text></View>
+            <TouchableOpacity style={styles.areaCodeBtn} onPress={() => setShowAreaPicker(true)} activeOpacity={0.7}>
+              <Text style={styles.areaCodeText}>{areaCode}</Text>
+              <Text style={styles.areaCodeChevron}>▾</Text>
+            </TouchableOpacity>
             <TextInput
-              style={styles.phoneInput} placeholder="請輸入 8 位手機號" placeholderTextColor={APP_GRAY}
+              style={styles.phoneInput} placeholder="請輸入手機號" placeholderTextColor={APP_GRAY}
               keyboardType="phone-pad" value={phone} onChangeText={setPhone} maxLength={12}
             />
           </View>
@@ -166,6 +178,27 @@ export default function RegisterScreen() {
           <Text style={styles.loginLinkText}>已有帳號？<Text style={{ color: APP_ORANGE }}>登入</Text></Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* 區號選擇 Modal */}
+      <Modal visible={showAreaPicker} transparent animationType="fade" onRequestClose={() => setShowAreaPicker(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowAreaPicker(false)}>
+          <View style={styles.pickerSheet}>
+            <Text style={styles.pickerTitle}>選擇國家/地區</Text>
+            {AREA_CODES.map(item => (
+              <TouchableOpacity
+                key={item.code}
+                style={[styles.pickerItem, areaCode === item.code && styles.pickerItemActive]}
+                onPress={() => { setAreaCode(item.code); setShowAreaPicker(false); }}
+              >
+                <Text style={[styles.pickerItemText, areaCode === item.code && styles.pickerItemTextActive]}>
+                  {item.label}
+                </Text>
+                {areaCode === item.code && <Text style={styles.pickerCheck}>✓</Text>}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -180,8 +213,14 @@ const styles = StyleSheet.create({
   formWrap: { backgroundColor: '#fff', borderRadius: 16, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
   label: { fontSize: 13, fontWeight: '600', color: APP_TEXT, marginBottom: 6 },
   phoneRow: { flexDirection: 'row', borderWidth: 1, borderColor: APP_BORDER, borderRadius: 12, overflow: 'hidden', marginBottom: 14 },
-  areaCode: { paddingHorizontal: 14, justifyContent: 'center', backgroundColor: '#f5f5f7', borderRightWidth: 1, borderRightColor: APP_BORDER },
+  areaCodeBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 12, backgroundColor: '#f5f5f7',
+    borderRightWidth: 1, borderRightColor: APP_BORDER,
+    minWidth: 72,
+  },
   areaCodeText: { fontSize: 15, fontWeight: '600', color: APP_TEXT },
+  areaCodeChevron: { fontSize: 10, color: APP_GRAY, marginTop: 1 },
   phoneInput: { flex: 1, height: 48, paddingHorizontal: 14, fontSize: 15, color: APP_TEXT },
   pwdRow: { flexDirection: 'row', borderWidth: 1, borderColor: APP_BORDER, borderRadius: 12, overflow: 'hidden', marginBottom: 14 },
   pwdInput: { flex: 1, height: 48, paddingHorizontal: 14, fontSize: 15, color: APP_TEXT },
@@ -197,4 +236,19 @@ const styles = StyleSheet.create({
   submitBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
   loginLink: { alignItems: 'center', marginTop: 20 },
   loginLinkText: { fontSize: 14, color: APP_GRAY },
+  // Modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  pickerSheet: {
+    backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    paddingTop: 20, paddingBottom: 40, paddingHorizontal: 24,
+  },
+  pickerTitle: { fontSize: 16, fontWeight: '700', color: APP_TEXT, marginBottom: 16, textAlign: 'center' },
+  pickerItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
+  },
+  pickerItemActive: { backgroundColor: '#fff8f3' },
+  pickerItemText: { fontSize: 16, color: APP_TEXT },
+  pickerItemTextActive: { color: APP_ORANGE, fontWeight: '600' },
+  pickerCheck: { fontSize: 16, color: APP_ORANGE, fontWeight: '700' },
 });
