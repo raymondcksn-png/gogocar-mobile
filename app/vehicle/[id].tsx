@@ -4,10 +4,11 @@
  */
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Dimensions, FlatList, Linking, Share, Alert,
   Platform, StatusBar,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { trpc, resolveImageUrl } from '../../lib/trpc';
 import { APP_ORANGE } from '../../constants/data';
@@ -195,7 +196,7 @@ export default function VehicleDetailScreen() {
                 showsHorizontalScrollIndicator={false}
                 keyExtractor={(_, i) => String(i)}
                 renderItem={({ item }) => (
-                  <Image source={{ uri: item }} style={styles.carImage} resizeMode="cover" />
+                  <Image source={{ uri: item }} style={styles.carImage} contentFit="cover" />
                 )}
                 onMomentumScrollEnd={e => {
                   const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
@@ -337,7 +338,7 @@ export default function VehicleDetailScreen() {
                 return (
                   <TouchableOpacity key={v.id} style={styles.similarCard} onPress={() => router.push(`/vehicle/${v.id}`)}>
                     {vImg ? (
-                      <Image source={{ uri: vImg }} style={styles.similarImg} resizeMode="cover" />
+                      <Image source={{ uri: vImg }} style={styles.similarImg} contentFit="cover" />
                     ) : (
                       <View style={[styles.similarImg, { backgroundColor: '#f2f2f7', justifyContent: 'center', alignItems: 'center' }]}>
                         <Text style={{ fontSize: 24 }}>🚗</Text>

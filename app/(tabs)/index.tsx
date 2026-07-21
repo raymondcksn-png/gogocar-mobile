@@ -5,8 +5,9 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Image, TextInput, FlatList, ActivityIndicator, Dimensions, RefreshControl, Linking,
+  TextInput, FlatList, ActivityIndicator, Dimensions, RefreshControl, Linking,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { trpc, resolveImageUrl } from '../../lib/trpc';
@@ -52,7 +53,7 @@ function VehicleListItem({ post, tagColorMap }: { post: any; tagColorMap?: Recor
     >
       <View style={styles.vehicleImgWrap}>
         {img ? (
-          <Image source={{ uri: img }} style={styles.vehicleImg} resizeMode="cover" />
+          <Image source={{ uri: img }} style={styles.vehicleImg} contentFit="cover" />
         ) : (
           <View style={[styles.vehicleImg, styles.vehicleImgPlaceholder]}>
             <Text style={{ color: '#ccc', fontSize: 12 }}>無圖片</Text>
@@ -298,7 +299,7 @@ export default function HomeScreen() {
                       <Image
                         source={{ uri: resolveImageUrl(b.logoUrl) || '' }}
                         style={styles.brandLogo}
-                        resizeMode="contain"
+                        contentFit="contain"
                       />
                     ) : (
                       <Text style={styles.brandInitial}>{(b.brandNameZh || b.name || '?').charAt(0)}</Text>
@@ -322,7 +323,7 @@ export default function HomeScreen() {
                       <Image
                         source={{ uri: resolveImageUrl(b.logoUrl) || '' }}
                         style={styles.brandLogo}
-                        resizeMode="contain"
+                        contentFit="contain"
                       />
                     ) : (
                       <Text style={styles.brandInitial}>{(b.brandNameZh || b.name || '?').charAt(0)}</Text>
@@ -362,7 +363,7 @@ export default function HomeScreen() {
               <Image
                 source={{ uri: resolveImageUrl(c.iconUrl || c.image) || undefined }}
                 style={styles.categoryImg}
-                resizeMode="cover"
+                contentFit="cover"
               />
             )}
           </TouchableOpacity>
@@ -382,7 +383,7 @@ export default function HomeScreen() {
               <Image
                 source={{ uri: resolveImageUrl(banner.imageUrl) || undefined }}
                 style={styles.bannerImg}
-                resizeMode="cover"
+                contentFit="cover"
               />
               {(banner.title || banner.description) && (
                 <View style={styles.bannerOverlay}>
@@ -460,7 +461,7 @@ export default function HomeScreen() {
                   onPress={() => handleBannerClick(banner)}
                   style={[styles.bannerSlide, { opacity: bIdx === middleBannerIndex % middleBanners.length ? 1 : 0 }]}
                 >
-                  <Image source={{ uri: resolveImageUrl(banner.imageUrl) || undefined }} style={styles.bannerImg} resizeMode="cover" />
+                  <Image source={{ uri: resolveImageUrl(banner.imageUrl) || undefined }} style={styles.bannerImg} contentFit="cover" />
                   {(banner.title || banner.description) && (
                     <View style={styles.bannerOverlay}>
                       {banner.title && <Text style={styles.bannerTitle} numberOfLines={1}>{banner.title}</Text>}

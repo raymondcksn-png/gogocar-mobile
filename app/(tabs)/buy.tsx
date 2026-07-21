@@ -5,8 +5,9 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput,
-  Image, ActivityIndicator, RefreshControl, Dimensions,
+  ActivityIndicator, RefreshControl, Dimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { trpc, resolveImageUrl } from '../../lib/trpc';
@@ -57,7 +58,7 @@ function PostListItem({ post, tagColorMap }: { post: any; tagColorMap?: Record<s
     >
       <View style={styles.imgWrap}>
         {img ? (
-          <Image source={{ uri: img }} style={styles.img} resizeMode="cover" />
+          <Image source={{ uri: img }} style={styles.img} contentFit="cover" />
         ) : (
           <View style={[styles.img, styles.imgPlaceholder]}>
             <Text style={{ color: '#ccc', fontSize: 12 }}>無圖片</Text>

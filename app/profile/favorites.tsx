@@ -5,8 +5,9 @@
 import React from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Image, ActivityIndicator,
+  ActivityIndicator,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { trpc, resolveImageUrl } from '../../lib/trpc';
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../../constants/data';
@@ -42,7 +43,7 @@ export default function FavoritesScreen() {
                 activeOpacity={0.7}
               >
                 {img ? (
-                  <Image source={{ uri: img }} style={styles.img} resizeMode="cover" />
+                  <Image source={{ uri: img }} style={styles.img} contentFit="cover" />
                 ) : (
                   <View style={[styles.img, styles.imgPlaceholder]}>
                     <Text style={{ color: '#ccc' }}>無圖</Text>
