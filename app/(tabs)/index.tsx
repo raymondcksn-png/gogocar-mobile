@@ -10,7 +10,7 @@ import {
 import { useRouter } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { trpc, resolveImageUrl } from '../../lib/trpc';
-import { APP_ORANGE, HOME_BRANDS, QUICK_PRICES, QUICK_AGES, CATEGORIES } from '../../constants/data';
+import { APP_ORANGE, QUICK_PRICES, QUICK_AGES, CATEGORIES } from '../../constants/data';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -133,6 +133,8 @@ export default function HomeScreen() {
   const { data: banners } = trpc.siteContent.listBanners.useQuery();
   const { data: quickLinks } = trpc.siteContent.listQuickLinks.useQuery();
   const { data: activeTags } = trpc.vehicle.getActiveTags.useQuery();
+  // 品牌圖標：根據 vehicleType 動態獲取，有 logoUrl 的優先
+  const { data: apiBrands } = trpc.vehicle.getBrands.useQuery({ vehicleType });
   const tagColorMap = useMemo(() => {
     const map: Record<string, string> = {};
     if (activeTags) activeTags.forEach((t: any) => { map[t.name] = t.color; });
@@ -273,22 +275,65 @@ export default function HomeScreen() {
           ))}
         </View>
 
-        {/* 品牌 Logo 網格（對照 HOME_BRANDS） */}
-        <View style={styles.brandGrid}>
-          {HOME_BRANDS.map(b => (
-            <TouchableOpacity
-              key={b.name}
-              style={styles.brandItem}
-              activeOpacity={0.6}
-              onPress={() => router.push(`/buy?brand=${encodeURIComponent(b.name)}`)}
-            >
-              <View style={styles.brandLogoWrap}>
-                <Text style={styles.brandInitial}>{b.initial || b.zh.charAt(0)}</Text>
-              </View>
-              <Text style={styles.brandName}>{b.zh}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {/* 品牌 Logo 水平滑動區（動態 API 數據，根據 vehicleType 切換） */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginHorizontal: -16, marginTop: 8 }}
+          contentContainerStyle={{ paddingHorizontal: 16 }}
+        >
+          {/* 2行×N列的網格佈局 */}
+          <View style={{ flexDirection: 'column', gap: 12 }}>
+            {/* 第一行 */}
+            <View style={{ flexDirection: 'row', gap: 16 }}>
+              {(apiBrands || []).filter((_: any, i: number) => i % 2 === 0).slice(0, 8).map((b: any) => (
+                <TouchableOpacity
+                  key={b.id}
+                  style={styles.brandItem}
+                  activeOpacity={0.6}
+                  onPress={() => router.push(`/buy?brand=${encodeURIComponent(b.brandNameZh || b.name)}`)}
+                >
+                  <View style={styles.brandLogoWrap}>
+                    {b.logoUrl ? (
+                      <Image
+                        source={{ uri: resolveImageUrl(b.logoUrl) || '' }}
+                        style={styles.brandLogo}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <Text style={styles.brandInitial}>{(b.brandNameZh || b.name || '?').charAt(0)}</Text>
+                    )}
+                  </View>
+                  <Text style={styles.brandName} numberOfLines={1}>{b.brandNameZh || b.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {/* 第二行 */}
+            <View style={{ flexDirection: 'row', gap: 16 }}>
+              {(apiBrands || []).filter((_: any, i: number) => i % 2 === 1).slice(0, 8).map((b: any) => (
+                <TouchableOpacity
+                  key={b.id}
+                  style={styles.brandItem}
+                  activeOpacity={0.6}
+                  onPress={() => router.push(`/buy?brand=${encodeURIComponent(b.brandNameZh || b.name)}`)}
+                >
+                  <View style={styles.brandLogoWrap}>
+                    {b.logoUrl ? (
+                      <Image
+                        source={{ uri: resolveImageUrl(b.logoUrl) || '' }}
+                        style={styles.brandLogo}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <Text style={styles.brandInitial}>{(b.brandNameZh || b.name || '?').charAt(0)}</Text>
+                    )}
+                  </View>
+                  <Text style={styles.brandName} numberOfLines={1}>{b.brandNameZh || b.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </ScrollView>
 
         {/* 查看更多品牌 */}
         <TouchableOpacity
