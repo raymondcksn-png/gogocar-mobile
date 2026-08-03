@@ -242,7 +242,7 @@ export default function HomeScreen() {
         <TouchableOpacity
           style={styles.searchBar}
           activeOpacity={0.8}
-          onPress={() => router.push('/(tabs)/buy')}
+          onPress={() => router.push('/search')}
         >
           <Text style={styles.searchIcon}>🔍</Text>
           <Text style={styles.searchPlaceholder}>輸入品牌、車系、年份...</Text>
