@@ -116,6 +116,20 @@ export default function VehicleDetailScreen() {
   const vin = (post as any)?.vin || '';
   const inspectionExpiry = (post as any)?.inspectionExpiry || '';
   const insuranceExpiry = (post as any)?.insuranceExpiry || '';
+  // 粵港澳三地市場字段（v3.1）
+  const registrationRegion: string = (post as any)?.registrationRegion || 'macau';
+  const rawPlates = (post as any)?.includedPlates;
+  const includedPlates: string[] = Array.isArray(rawPlates)
+    ? rawPlates
+    : (typeof rawPlates === 'string' && rawPlates ? (() => { try { return JSON.parse(rawPlates); } catch { return []; } })() : []);
+  const REGION_LABELS: Record<string, string> = { macau: '🇲🇴 澳門', hongkong: '🇭🇰 香港', guangdong: '🇨🇳 廣東' };
+  const PLATE_LABEL_MAP: Record<string, { label: string; color: string }> = {
+    hk_macao: { label: '🔵 連港澳牌', color: '#2563eb' },
+    gd_hk: { label: '🟢 連粵港牌', color: '#16a34a' },
+    gd_macao: { label: '🟢 連粵澳牌', color: '#16a34a' },
+    triple: { label: '🟡 連三地牌', color: '#d97706' },
+  };
+  const plateChips = includedPlates.map(p => PLATE_LABEL_MAP[p]).filter(Boolean) as { label: string; color: string }[];
 
   const specRows = [
     brandName ? { label: '品牌', value: brandName } : null,
@@ -251,6 +265,17 @@ export default function VehicleDetailScreen() {
             {mileage ? <ChipTag label={mileage} /> : null}
             {gear ? <ChipTag label={gear} /> : null}
             {engine ? <ChipTag label={engine} /> : null}
+          </View>
+          {/* 登記地 + 跨境牌照標籤 */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+            <View style={{ backgroundColor: '#f3f4f6', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+              <Text style={{ fontSize: 11, color: '#6b7280' }}>登記地：{REGION_LABELS[registrationRegion] || registrationRegion}</Text>
+            </View>
+            {plateChips.map((chip, i) => (
+              <View key={i} style={{ backgroundColor: `${chip.color}18`, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: `${chip.color}40` }}>
+                <Text style={{ fontSize: 11, color: chip.color, fontWeight: '600' }}>{chip.label}</Text>
+              </View>
+            ))}
           </View>
         </View>
 

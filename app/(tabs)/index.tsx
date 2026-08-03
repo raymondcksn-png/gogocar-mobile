@@ -114,6 +114,7 @@ function VehicleSkeleton() {
 // ─── 主頁面 ──────────────────────────────────────────────────────────────────
 export default function HomeScreen() {
   const router = useRouter();
+  const [region, setRegion] = useState<'macau' | 'hongkong'>('macau');
   const [vehicleType, setVehicleType] = useState<'car' | 'motorcycle'>('car');
   const [page, setPage] = useState(1);
   const [allPosts, setAllPosts] = useState<any[]>([]);
@@ -129,6 +130,7 @@ export default function HomeScreen() {
     vehicleType,
     page,
     pageSize: 10,
+    region: region as any,
   });
 
   const { data: banners } = trpc.siteContent.listBanners.useQuery();
@@ -144,6 +146,12 @@ export default function HomeScreen() {
   // ── 切換車輛類型（對照 handleVehicleTypeChange）────────────────────────────
   const handleVehicleTypeChange = useCallback((type: 'car' | 'motorcycle') => {
     setVehicleType(type);
+    setPage(1);
+    setAllPosts([]);
+    setHasMore(true);
+  }, []);
+  const handleRegionChange = useCallback((r: 'macau' | 'hongkong') => {
+    setRegion(r);
     setPage(1);
     setAllPosts([]);
     setHasMore(true);
@@ -217,7 +225,19 @@ export default function HomeScreen() {
       <View style={styles.searchSection}>
         <View style={styles.logoRow}>
           <Text style={styles.logoText}>GoGoCar</Text>
-          <Text style={styles.logoSub}>澳門二手車平台</Text>
+          {/* 地區切換（澳門 / 香港）*/}
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            {([{ label: '🇲🇴 澳門', value: 'macau' as const }, { label: '🇭🇰 香港', value: 'hongkong' as const }]).map(r => (
+              <TouchableOpacity
+                key={r.value}
+                style={[styles.regionPill, region === r.value && styles.regionPillActive]}
+                onPress={() => handleRegionChange(r.value)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.regionPillText, region === r.value && styles.regionPillTextActive]}>{r.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
         <TouchableOpacity
           style={styles.searchBar}
@@ -629,6 +649,15 @@ const styles = StyleSheet.create({
   tagChip: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
   tagChipText: { color: '#fff', fontSize: 10, fontWeight: '500' },
   vehiclePrice: { fontSize: 17, fontWeight: '700', color: APP_ORANGE, letterSpacing: -0.3, marginTop: 4 },
+
+  // 地區切換膠囊
+  regionPill: {
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 14,
+    backgroundColor: '#f2f2f7', borderWidth: 1.5, borderColor: 'transparent',
+  },
+  regionPillActive: { backgroundColor: `${APP_ORANGE}15`, borderColor: APP_ORANGE },
+  regionPillText: { fontSize: 12, fontWeight: '500', color: '#8e8e93' },
+  regionPillTextActive: { color: APP_ORANGE, fontWeight: '700' },
 
   // 底部
   noMore: { textAlign: 'center', paddingVertical: 16, color: '#8e8e93', fontSize: 13 },

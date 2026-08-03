@@ -1,11 +1,12 @@
 /**
  * 買車列表頁 — 篩選 + 搜索 + 車源列表
  * API: trpc.vehicle.listPosts + trpc.vehicle.getActiveTags
+ * v3.1 升級：地區 Tab（澳門/香港）+ 跨境牌照篩選
  */
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput,
-  ActivityIndicator, RefreshControl, Dimensions,
+  ActivityIndicator, RefreshControl, Dimensions, ScrollView,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -15,7 +16,21 @@ import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER, FUEL_TYPE_LABELS } 
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
-// ── 篩選選項 ──────────────────────────────────────────────────────────────────
+// ── 地區 Tab ──────────────────────────────────────────────────────────────────
+const REGION_TABS = [
+  { label: '🇲🇴 澳門', value: 'macau' },
+  { label: '🇭🇰 香港', value: 'hongkong' },
+];
+
+// ── 跨境牌照篩選 ──────────────────────────────────────────────────────────────
+const PLATE_FILTERS = [
+  { label: '連港澳牌', value: 'hk_macao' },
+  { label: '連粵港牌', value: 'gd_hk' },
+  { label: '連粵澳牌', value: 'gd_macao' },
+  { label: '連三地牌', value: 'triple' },
+];
+
+// ── 車輛類型篩選 ──────────────────────────────────────────────────────────────
 const VEHICLE_TYPES = [
   { label: '全部', value: '' },
   { label: '私家車', value: 'car' },
@@ -50,6 +65,18 @@ function PostListItem({ post, tagColorMap }: { post: any; tagColorMap?: Record<s
   const isPinned = post.pinnedExpireAt && new Date(post.pinnedExpireAt) > now;
   const isFeatured = !isPinned && post.featuredExpireAt && new Date(post.featuredExpireAt) > now;
 
+  // 跨境牌照標籤
+  const plateLabels: { label: string; color: string }[] = [];
+  const plates: string[] = Array.isArray(post.includedPlates)
+    ? post.includedPlates
+    : (typeof post.includedPlates === 'string' ? JSON.parse(post.includedPlates || '[]') : []);
+  if (plates.includes('triple')) plateLabels.push({ label: '🟡 連三地牌', color: '#d97706' });
+  else {
+    if (plates.includes('hk_macao')) plateLabels.push({ label: '🔵 連港澳牌', color: '#2563eb' });
+    if (plates.includes('gd_hk')) plateLabels.push({ label: '🟢 連粵港牌', color: '#16a34a' });
+    if (plates.includes('gd_macao')) plateLabels.push({ label: '🟢 連粵澳牌', color: '#16a34a' });
+  }
+
   return (
     <TouchableOpacity
       style={styles.item}
@@ -82,8 +109,13 @@ function PostListItem({ post, tagColorMap }: { post: any; tagColorMap?: Record<s
         {detailParts.length > 0 && (
           <Text style={styles.meta}>{detailParts.join(' · ')}</Text>
         )}
-        {(tags.length > 0 || fuelInfo) && (
+        {(tags.length > 0 || fuelInfo || plateLabels.length > 0) && (
           <View style={styles.tagsRow}>
+            {plateLabels.map((pl, i) => (
+              <View key={`plate-${i}`} style={[styles.tagChip, { backgroundColor: pl.color }]}>
+                <Text style={styles.tagChipText}>{pl.label}</Text>
+              </View>
+            ))}
             {tags.map((tag: string, i: number) => (
               <View key={i} style={[styles.tagChip, { backgroundColor: tagColorMap?.[tag] || (i % 2 === 0 ? APP_ORANGE : '#3b82f6') }]}>
                 <Text style={styles.tagChipText}>{tag}</Text>
@@ -104,6 +136,8 @@ function PostListItem({ post, tagColorMap }: { post: any; tagColorMap?: Record<s
 
 // ── 主頁面 ────────────────────────────────────────────────────────────────────
 export default function BuyScreen() {
+  const [region, setRegion] = useState<'macau' | 'hongkong'>('macau');
+  const [includedPlate, setIncludedPlate] = useState<string | undefined>(undefined);
   const [vehicleType, setVehicleType] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [search, setSearch] = useState('');
@@ -126,7 +160,9 @@ export default function BuyScreen() {
     sortBy: sortBy as any,
     page,
     pageSize: 20,
-  }), [vehicleType, search, sortBy, page]);
+    region: region as any,
+    includedPlate: includedPlate as any,
+  }), [vehicleType, search, sortBy, page, region, includedPlate]);
 
   const { data, isLoading, refetch } = trpc.vehicle.listPosts.useQuery(queryParams);
 
@@ -165,11 +201,55 @@ export default function BuyScreen() {
     setAllItems([]);
   };
 
+  const handleRegionChange = (r: 'macau' | 'hongkong') => {
+    setRegion(r);
+    setPage(1);
+    setAllItems([]);
+    setIncludedPlate(undefined); // 切換地區時清除牌照篩選
+  };
+
+  const handlePlateFilter = (plate: string) => {
+    setIncludedPlate(prev => prev === plate ? undefined : plate);
+    setPage(1);
+    setAllItems([]);
+  };
+
   return (
     <View style={styles.container}>
       {/* 頂部欄 */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>買車</Text>
+      </View>
+
+      {/* 地區 Tab（澳門 / 香港）+ 跨境牌照篩選 */}
+      <View style={styles.regionBar}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.regionBarContent}>
+          {REGION_TABS.map(r => (
+            <TouchableOpacity
+              key={r.value}
+              style={[styles.regionTab, region === r.value && styles.regionTabActive]}
+              onPress={() => handleRegionChange(r.value as 'macau' | 'hongkong')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.regionTabText, region === r.value && styles.regionTabTextActive]}>
+                {r.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          <View style={styles.regionDivider} />
+          {PLATE_FILTERS.map(p => (
+            <TouchableOpacity
+              key={p.value}
+              style={[styles.plateFilterBtn, includedPlate === p.value && styles.plateFilterBtnActive]}
+              onPress={() => handlePlateFilter(p.value)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.plateFilterText, includedPlate === p.value && styles.plateFilterTextActive]}>
+                {p.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       {/* 搜索欄 */}
@@ -242,7 +322,15 @@ export default function BuyScreen() {
           isLoading ? (
             <View style={styles.loading}><ActivityIndicator color={APP_ORANGE} size="large" /></View>
           ) : (
-            <Text style={styles.empty}>暫無車源</Text>
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyIcon}>🚗</Text>
+              <Text style={styles.empty}>
+                {region === 'hongkong' ? '香港車源即將上線' : '暫無車源'}
+              </Text>
+              {region === 'hongkong' && (
+                <Text style={styles.emptyHint}>敬請期待，或切換至澳門查看車源</Text>
+              )}
+            </View>
           )
         }
         ListFooterComponent={
@@ -270,6 +358,55 @@ const styles = StyleSheet.create({
     borderBottomColor: APP_BORDER,
   },
   headerTitle: { fontSize: 22, fontWeight: '700', color: APP_TEXT, letterSpacing: -0.5 },
+
+  // 地區 Tab 欄
+  regionBar: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 0.5,
+    borderBottomColor: APP_BORDER,
+  },
+  regionBarContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  regionTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 18,
+    backgroundColor: APP_BG,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  regionTabActive: {
+    backgroundColor: `${APP_ORANGE}15`,
+    borderColor: APP_ORANGE,
+  },
+  regionTabText: { fontSize: 13, fontWeight: '500', color: APP_GRAY },
+  regionTabTextActive: { color: APP_ORANGE, fontWeight: '700' },
+  regionDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: APP_BORDER,
+    marginHorizontal: 4,
+  },
+  plateFilterBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: APP_BG,
+    borderWidth: 1,
+    borderColor: APP_BORDER,
+  },
+  plateFilterBtnActive: {
+    backgroundColor: '#2563eb15',
+    borderColor: '#2563eb',
+  },
+  plateFilterText: { fontSize: 12, color: APP_GRAY },
+  plateFilterTextActive: { color: '#2563eb', fontWeight: '600' },
+
   searchWrap: { backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 10 },
   searchBar: {
     flexDirection: 'row',
@@ -343,7 +480,10 @@ const styles = StyleSheet.create({
   tagChipText: { color: '#fff', fontSize: 10, fontWeight: '500' },
   price: { fontSize: 16, fontWeight: '700', color: APP_ORANGE, letterSpacing: -0.3, marginTop: 4 },
   loading: { paddingVertical: 40, alignItems: 'center' },
-  empty: { textAlign: 'center', paddingVertical: 40, color: APP_GRAY, fontSize: 14 },
+  emptyWrap: { paddingVertical: 48, alignItems: 'center' },
+  emptyIcon: { fontSize: 40, marginBottom: 12 },
+  empty: { textAlign: 'center', color: APP_GRAY, fontSize: 15, fontWeight: '500' },
+  emptyHint: { textAlign: 'center', color: APP_GRAY, fontSize: 13, marginTop: 6, opacity: 0.7 },
   loadingMore: { paddingVertical: 16, alignItems: 'center' },
   noMore: { textAlign: 'center', paddingVertical: 16, color: APP_GRAY, fontSize: 13 },
 });
