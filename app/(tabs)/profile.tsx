@@ -163,6 +163,7 @@ export default function ProfileScreen() {
           <MenuItem icon="📋" label="我發佈的車源" onPress={() => router.push('/profile/my-posts')} />
           <MenuItem icon="❤️" label="我的收藏" onPress={() => router.push('/profile/favorites')} />
           <MenuItem icon="💬" label="我的消息" onPress={() => router.push('/profile/messages')} />
+          <MenuItem icon="🚗" label="發佈車源" onPress={() => router.push('/(tabs)/sell')} />
         </View>
 
         {/* 賬戶設置 */}
@@ -195,6 +196,11 @@ export default function ProfileScreen() {
               <Text style={styles.logoutBtnText}>登出</Text>
             )}
           </TouchableOpacity>
+        </View>
+
+        {/* 版本號 */}
+        <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+          <Text style={{ fontSize: 12, color: APP_GRAY }}>GoGoCar v2.0 粵港澳三地二手車平台</Text>
         </View>
 
         <View style={{ height: 40 }} />

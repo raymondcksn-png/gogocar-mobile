@@ -1,6 +1,6 @@
 /**
- * 賣車/發佈頁 — 發佈車源表單
- * API: trpc.vehicle.createPost + trpc.vehicle.getDsatBrands
+ * 賣車/發佈頁 — 發佈車源表單（v3.1 升級：車輛出生地 + 售價包含牌照勾選）
+ * API: trpc.vehicle.createPost
  */
 import React, { useState } from 'react';
 import {
@@ -18,19 +18,30 @@ const VEHICLE_TYPES = [
   { label: '電單車', value: 'motorcycle' },
   { label: '商用車', value: 'commercial' },
 ];
-
 const TRANSMISSION_TYPES = [
   { label: '自動波', value: 'auto' },
   { label: '手波', value: 'manual' },
   { label: 'CVT', value: 'cvt' },
 ];
-
 const FUEL_TYPES = [
   { label: '汽油', value: 'petrol' },
   { label: '柴油', value: 'diesel' },
   { label: '純電', value: 'electric' },
   { label: '油電混合', value: 'hybrid' },
   { label: '插電混動', value: 'pluginHybrid' },
+];
+// 車輛出生地（v3.1）
+const REGISTRATION_REGIONS = [
+  { label: '🇲🇴 澳門', value: 'macau' },
+  { label: '🇭🇰 香港', value: 'hongkong' },
+  { label: '🇨🇳 廣東', value: 'guangdong' },
+];
+// 跨境牌照選項（電單車不顯示）
+const INCLUDED_PLATES_OPTIONS = [
+  { label: '連港澳牌', value: 'hk_macao', desc: '澳門 ↔ 香港' },
+  { label: '連粵港牌', value: 'gd_hk', desc: '廣東 ↔ 香港' },
+  { label: '連粵澳牌', value: 'gd_macao', desc: '廣東 ↔ 澳門' },
+  { label: '連三地牌', value: 'triple', desc: '粵港澳三地' },
 ];
 
 interface FormData {
@@ -45,6 +56,8 @@ interface FormData {
   colorName: string;
   description: string;
   contactPhone: string;
+  registrationRegion: string;
+  includedPlates: string[];
 }
 
 export default function SellScreen() {
@@ -62,18 +75,20 @@ export default function SellScreen() {
     colorName: '',
     description: '',
     contactPhone: user?.phone || '',
+    registrationRegion: 'macau',
+    includedPlates: [],
   });
   const [photos, setPhotos] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const createPostMutation = trpc.vehicle.createPost.useMutation({
-    onSuccess: (data) => {
+    onSuccess: () => {
       setSubmitting(false);
       Alert.alert('成功', '車源已提交，等待審核後將顯示在列表中', [
         { text: '確定', onPress: () => router.push('/(tabs)/buy') },
       ]);
     },
-    onError: (err) => {
+    onError: (err: any) => {
       setSubmitting(false);
       Alert.alert('提交失敗', err.message || '請稍後重試');
     },
@@ -107,7 +122,6 @@ export default function SellScreen() {
     if (!form.modelName.trim()) { Alert.alert('提示', '請填寫型號'); return; }
     if (!form.price.trim()) { Alert.alert('提示', '請填寫售價'); return; }
     if (!form.contactPhone.trim()) { Alert.alert('提示', '請填寫聯絡電話'); return; }
-
     setSubmitting(true);
     createPostMutation.mutate({
       vehicleType: form.vehicleType,
@@ -121,10 +135,24 @@ export default function SellScreen() {
       colorName: form.colorName,
       description: form.description,
       contactPhone: form.contactPhone,
+      registrationRegion: form.registrationRegion as any,
+      includedPlates: form.includedPlates.length > 0 ? form.includedPlates : undefined,
     });
   };
 
   const update = (key: keyof FormData, val: string) => setForm(f => ({ ...f, [key]: val }));
+
+  // 切換跨境牌照勾選
+  const togglePlate = (val: string) => {
+    setForm(f => {
+      const plates = f.includedPlates.includes(val)
+        ? f.includedPlates.filter(p => p !== val)
+        : [...f.includedPlates, val];
+      return { ...f, includedPlates: plates };
+    });
+  };
+
+  const isMoto = form.vehicleType === 'motorcycle';
 
   if (!isLoggedIn) {
     return (
@@ -145,6 +173,7 @@ export default function SellScreen() {
         <Text style={styles.headerTitle}>發佈車源</Text>
       </View>
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+
         {/* 車輛類型 */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>車輛類型 *</Text>
@@ -163,6 +192,29 @@ export default function SellScreen() {
           </View>
         </View>
 
+        {/* 車輛出生地（v3.1 新增）*/}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>車輛登記地 *</Text>
+          <Text style={styles.sectionHint}>決定車牌格式、計價貨幣及適用車型庫</Text>
+          <View style={styles.optionRow}>
+            {REGISTRATION_REGIONS.map(r => (
+              <TouchableOpacity
+                key={r.value}
+                style={[styles.optionBtn, form.registrationRegion === r.value && styles.optionBtnActive]}
+                onPress={() => {
+                  update('registrationRegion', r.value);
+                  // 切換地區時清空跨境牌選擇
+                  setForm(f => ({ ...f, registrationRegion: r.value, includedPlates: [] }));
+                }}
+              >
+                <Text style={[styles.optionBtnText, form.registrationRegion === r.value && styles.optionBtnTextActive]}>
+                  {r.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
         {/* 基本信息 */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>基本信息</Text>
@@ -170,8 +222,44 @@ export default function SellScreen() {
           <FormField label="型號 *" placeholder="例：Camry" value={form.modelName} onChangeText={v => update('modelName', v)} />
           <FormField label="年份" placeholder="例：2020" value={form.year} onChangeText={v => update('year', v)} keyboardType="numeric" />
           <FormField label="里數 (km)" placeholder="例：50000" value={form.mileage} onChangeText={v => update('mileage', v)} keyboardType="numeric" />
-          <FormField label="售價 (HKD) *" placeholder="例：150000" value={form.price} onChangeText={v => update('price', v)} keyboardType="numeric" />
           <FormField label="車身顏色" placeholder="例：珍珠白" value={form.colorName} onChangeText={v => update('colorName', v)} />
+        </View>
+
+        {/* 售價 + 跨境牌照（v3.1 核心設計）*/}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>售價</Text>
+          <FormField label="售價 (HKD) *" placeholder="例：150000" value={form.price} onChangeText={v => update('price', v)} keyboardType="numeric" />
+
+          {/* 跨境牌照勾選（電單車隱藏）*/}
+          {!isMoto && (
+            <View style={styles.platesWrap}>
+              <Text style={styles.platesTitle}>售價包含（可多選）</Text>
+              <View style={styles.platesGrid}>
+                {INCLUDED_PLATES_OPTIONS.map(opt => {
+                  const checked = form.includedPlates.includes(opt.value);
+                  return (
+                    <TouchableOpacity
+                      key={opt.value}
+                      style={[styles.plateChip, checked && styles.plateChipActive]}
+                      onPress={() => togglePlate(opt.value)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+                        {checked && <Text style={styles.checkmark}>✓</Text>}
+                      </View>
+                      <View>
+                        <Text style={[styles.plateLabel, checked && styles.plateLabelActive]}>{opt.label}</Text>
+                        <Text style={styles.plateDesc}>{opt.desc}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {form.includedPlates.length === 0 && (
+                <Text style={styles.platesHint}>不勾選 = 單牌車（不含跨境牌照）</Text>
+              )}
+            </View>
+          )}
         </View>
 
         {/* 變速箱 */}
@@ -320,7 +408,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
-  sectionTitle: { fontSize: 15, fontWeight: '600', color: APP_TEXT, marginBottom: 12 },
+  sectionTitle: { fontSize: 15, fontWeight: '600', color: APP_TEXT, marginBottom: 4 },
+  sectionHint: { fontSize: 12, color: APP_GRAY, marginBottom: 12 },
   optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   optionBtn: {
     paddingHorizontal: 16,
@@ -355,56 +444,76 @@ const styles = StyleSheet.create({
     color: APP_TEXT,
     minHeight: 100,
   },
+  // 跨境牌照勾選區（v3.1）
+  platesWrap: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 0.5,
+    borderTopColor: APP_BORDER,
+  },
+  platesTitle: { fontSize: 13, color: APP_GRAY, marginBottom: 10 },
+  platesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  plateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: APP_BORDER,
+    backgroundColor: '#fff',
+    minWidth: '45%',
+  },
+  plateChipActive: { borderColor: APP_ORANGE, backgroundColor: `${APP_ORANGE}10` },
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: APP_BORDER,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxChecked: { backgroundColor: APP_ORANGE, borderColor: APP_ORANGE },
+  checkmark: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  plateLabel: { fontSize: 13, fontWeight: '600', color: APP_TEXT },
+  plateLabelActive: { color: APP_ORANGE },
+  plateDesc: { fontSize: 11, color: APP_GRAY, marginTop: 1 },
+  platesHint: { fontSize: 11, color: APP_GRAY, marginTop: 8, fontStyle: 'italic' },
+  // 圖片
   photoRow: { flexDirection: 'row' },
   photoWrap: { position: 'relative', marginRight: 8 },
   photo: { width: 80, height: 80, borderRadius: 8 },
   photoRemove: {
-    position: 'absolute',
-    top: -6,
-    right: -6,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#ff3b30',
-    justifyContent: 'center',
-    alignItems: 'center',
+    position: 'absolute', top: -6, right: -6,
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: '#ff3b30', justifyContent: 'center', alignItems: 'center',
   },
   photoRemoveText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   addPhotoBtn: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: APP_BORDER,
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: APP_BG,
+    width: 80, height: 80, borderRadius: 8,
+    borderWidth: 1.5, borderColor: APP_BORDER, borderStyle: 'dashed',
+    justifyContent: 'center', alignItems: 'center', backgroundColor: APP_BG,
   },
   addPhotoIcon: { fontSize: 24, color: APP_GRAY },
   addPhotoText: { fontSize: 11, color: APP_GRAY, marginTop: 2 },
+  // 提交
   submitBtn: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: APP_ORANGE,
-    justifyContent: 'center',
-    alignItems: 'center',
+    marginHorizontal: 16, marginTop: 16, height: 52,
+    borderRadius: 14, backgroundColor: APP_ORANGE,
+    justifyContent: 'center', alignItems: 'center',
   },
   submitBtnDisabled: { backgroundColor: '#ffb380' },
   submitBtnText: { fontSize: 17, fontWeight: '700', color: '#fff' },
+  // 訪客態
   guestWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: APP_BG, padding: 32 },
   guestIcon: { fontSize: 64, marginBottom: 16 },
   guestTitle: { fontSize: 20, fontWeight: '700', color: APP_TEXT, marginBottom: 8 },
   guestSubtitle: { fontSize: 14, color: APP_GRAY, marginBottom: 32, textAlign: 'center' },
   loginBtn: {
-    width: 200,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: APP_ORANGE,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 200, height: 48, borderRadius: 24,
+    backgroundColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center',
   },
   loginBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
 });
