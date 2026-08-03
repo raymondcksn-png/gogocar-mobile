@@ -82,37 +82,42 @@ const fb = StyleSheet.create({
   arrowActive: { color: APP_ORANGE },
 });
 
-// ─── 下拉面板（對齊 WebApp DropdownPanel）────────────────
+// ─── 下拉面板（緊貼篩選欄，不全屏覆蓋）────────────────────
 function DropdownPanel({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
-    <View style={dp.wrap}>
-      <Pressable style={dp.backdrop} onPress={onClose} />
+    <>
+      {/* 透明遮罩，點擊關閉，不遮擋面板本身 */}
+      <Pressable
+        style={{ position: 'absolute', top: 42, left: 0, right: 0, bottom: -2000, zIndex: 199 }}
+        onPress={onClose}
+      />
       <View style={dp.panel}>
         <Text style={dp.title}>{title}</Text>
         {children}
       </View>
-    </View>
+    </>
   );
 }
 function DropdownOption({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
     <TouchableOpacity style={[dp.opt, active && dp.optActive]} onPress={onPress} activeOpacity={0.6}>
       <Text style={[dp.optText, active && dp.optTextActive]}>{label}</Text>
-      {active && <Text style={{ color: APP_ORANGE, fontSize: 16 }}>✓</Text>}
+      {active && <Text style={{ color: APP_ORANGE, fontSize: 15 }}>✓</Text>}
     </TouchableOpacity>
   );
 }
 const dp = StyleSheet.create({
-  wrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: -2000, zIndex: 200 },
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   panel: {
-    backgroundColor: '#fff', borderBottomLeftRadius: 12, borderBottomRightRadius: 12,
-    paddingBottom: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1, shadowRadius: 8, elevation: 8,
+    backgroundColor: '#fff',
+    borderBottomLeftRadius: 10, borderBottomRightRadius: 10,
+    paddingBottom: 4,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12, shadowRadius: 10, elevation: 10,
     borderTopWidth: 0.5, borderTopColor: 'rgba(0,0,0,0.06)',
+    zIndex: 200,
   },
-  title: { fontSize: 12, color: APP_GRAY, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 },
-  opt: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: '#f5f5f5' },
+  title: { fontSize: 11, color: APP_GRAY, paddingHorizontal: 14, paddingTop: 8, paddingBottom: 2, fontWeight: '500' },
+  opt: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 0.5, borderBottomColor: '#f5f5f5' },
   optActive: { backgroundColor: APP_ORANGE_LIGHT },
   optText: { fontSize: 14, color: APP_TEXT },
   optTextActive: { color: APP_ORANGE, fontWeight: '600' },
@@ -670,13 +675,13 @@ const s = StyleSheet.create({
   regionBtnText: { fontSize: 13, color: APP_GRAY, fontWeight: '500' },
   regionBtnTextActive: { color: '#fff', fontWeight: '700' },
 
-  // 搜索欄
-  searchWrap: { backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 0.5, borderBottomColor: 'rgba(0,0,0,0.06)' },
+  // 搜索欄（無底部邊框，與篩選欄無縫連接）
+  searchWrap: { backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8 },
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f2f2f7', borderRadius: 22, paddingHorizontal: 14, height: 44 },
   searchInput: { flex: 1, fontSize: 15, color: APP_TEXT },
 
-  // 篩選欄
-  filterBar: { backgroundColor: '#fff', borderBottomWidth: 0.5, borderBottomColor: 'rgba(0,0,0,0.06)', zIndex: 100 },
+  // 篩選欄（與搜索欄無縫連接）
+  filterBar: { backgroundColor: '#fff', borderBottomWidth: 0.5, borderBottomColor: 'rgba(0,0,0,0.06)', zIndex: 100, overflow: 'visible' },
   filterBarInner: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 },
   filterDivider: { width: 0.5, height: 16, backgroundColor: 'rgba(0,0,0,0.12)', marginHorizontal: 2 },
 
