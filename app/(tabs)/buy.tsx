@@ -8,7 +8,7 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput,
   ActivityIndicator, RefreshControl, Dimensions, ScrollView, Modal,
-  Pressable, Platform,
+  Pressable, Platform, Animated, PanResponder,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -76,9 +76,9 @@ function FilterBtn({ label, active, onPress }: { label: string; active: boolean;
 const fb = StyleSheet.create({
   btn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, height: 42 },
   btnActive: {},
-  text: { fontSize: 13, color: APP_TEXT, fontWeight: '400' },
+  text: { fontSize: 14, color: APP_TEXT, fontWeight: '400' },
   textActive: { color: APP_ORANGE, fontWeight: '600' },
-  arrow: { fontSize: 9, color: APP_GRAY, marginLeft: 2, marginTop: 1 },
+  arrow: { fontSize: 14, color: APP_GRAY, marginLeft: 3 },
   arrowActive: { color: APP_ORANGE },
 });
 
@@ -123,12 +123,26 @@ const dp = StyleSheet.create({
   optTextActive: { color: APP_ORANGE, fontWeight: '600' },
 });
 
-// ─── 品牌選擇 Modal ───────────────────────────────────────
+// ─── 品牌選擇 Modal（支持向下滑手勢關閉）────────────────────
 function BrandModal({ brands, selectedBrandId, onSelect, onClear, onClose }: {
   brands: any[]; selectedBrandId: number | undefined;
   onSelect: (id: number, name: string) => void;
   onClear: () => void; onClose: () => void;
 }) {
+  const translateY = useRef(new Animated.Value(0)).current;
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderMove: (_, g) => { if (g.dy > 0) translateY.setValue(g.dy); },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 80 || g.vy > 0.5) {
+          Animated.timing(translateY, { toValue: 600, duration: 200, useNativeDriver: true }).start(onClose);
+        } else {
+          Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+        }
+      },
+    })
+  ).current;
   const { hotBrands, grouped, letters } = useMemo(() => {
     const hot = brands.filter(b => b.logoUrl && b.showOnHome).slice(0, 8);
     const g: Record<string, any[]> = {};
@@ -139,11 +153,14 @@ function BrandModal({ brands, selectedBrandId, onSelect, onClear, onClose }: {
     });
     return { hotBrands: hot, grouped: g, letters: Object.keys(g).sort() };
   }, [brands]);
-
   return (
     <Modal visible animationType="slide" transparent onRequestClose={onClose}>
       <View style={bm.overlay}>
-        <View style={bm.panel}>
+        <Animated.View style={[bm.panel, { transform: [{ translateY }] }]}>
+          {/* 拖拉條 + 手勢區域 */}
+          <View {...panResponder.panHandlers} style={bm.dragHandle}>
+            <View style={bm.dragBar} />
+          </View>
           <View style={bm.header}>
             <Text style={bm.title}>選擇品牌</Text>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
@@ -198,7 +215,78 @@ function BrandModal({ brands, selectedBrandId, onSelect, onClear, onClose }: {
             ))}
             <View style={{ height: 48 }} />
           </ScrollView>
-        </View>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+}
+// ─── 進階篩選 Modal（標籤篩選，大廠做法：底部 Sheet）────────────────────────
+function AdvancedFilterModal({ tags, selectedTags, onToggle, onClear, onClose }: {
+  tags: any[]; selectedTags: string[];
+  onToggle: (name: string) => void;
+  onClear: () => void; onClose: () => void;
+}) {
+  const translateY = useRef(new Animated.Value(0)).current;
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderMove: (_, g) => { if (g.dy > 0) translateY.setValue(g.dy); },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 80 || g.vy > 0.5) {
+          Animated.timing(translateY, { toValue: 600, duration: 200, useNativeDriver: true }).start(onClose);
+        } else {
+          Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+        }
+      },
+    })
+  ).current;
+  return (
+    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+      <View style={bm.overlay}>
+        <Animated.View style={[bm.panel, { transform: [{ translateY }] }]}>
+          <View {...panResponder.panHandlers} style={bm.dragHandle}>
+            <View style={bm.dragBar} />
+          </View>
+          <View style={bm.header}>
+            <Text style={bm.title}>進階篩選</Text>
+            <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Text style={bm.close}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 48 }}>
+            <Text style={bm.sectionLabel}>車輛標籤</Text>
+            <Text style={{ fontSize: 12, color: APP_GRAY, marginBottom: 12 }}>選擇你感興趣的車輛特色，可多選</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {tags.map(tag => {
+                const active = selectedTags.includes(tag.name);
+                return (
+                  <TouchableOpacity
+                    key={tag.id}
+                    onPress={() => onToggle(tag.name)}
+                    activeOpacity={0.7}
+                    style={[
+                      { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5,
+                        borderColor: active ? (tag.color || APP_ORANGE) : APP_BORDER,
+                        backgroundColor: active ? (tag.color || APP_ORANGE) + '18' : '#fff' }
+                    ]}
+                  >
+                    <Text style={{ fontSize: 14, color: active ? (tag.color || APP_ORANGE) : APP_TEXT, fontWeight: active ? '600' : '400' }}>
+                      {tag.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {selectedTags.length > 0 && (
+              <TouchableOpacity
+                onPress={onClear}
+                style={{ marginTop: 20, paddingVertical: 12, borderRadius: 10, backgroundColor: '#f5f5f5', alignItems: 'center' }}
+              >
+                <Text style={{ fontSize: 14, color: APP_GRAY }}>清除標籤篩選</Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -206,6 +294,8 @@ function BrandModal({ brands, selectedBrandId, onSelect, onClear, onClose }: {
 const bm = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   panel: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '88%', paddingBottom: 20 },
+  dragHandle: { alignItems: 'center', paddingTop: 12, paddingBottom: 4 },
+  dragBar: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#e0e0e0' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 0.5, borderBottomColor: 'rgba(0,0,0,0.08)' },
   title: { fontSize: 16, fontWeight: '700', color: APP_TEXT },
   close: { fontSize: 18, color: APP_GRAY },
@@ -310,12 +400,12 @@ const pi = StyleSheet.create({
   badgeText: { color: '#fff', fontSize: 9, fontWeight: '700' },
   videoIcon: { position: 'absolute', bottom: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 10, width: 20, height: 20, justifyContent: 'center', alignItems: 'center' },
   info: { flex: 1, padding: 10, justifyContent: 'space-between' },
-  title: { fontSize: 14, color: APP_TEXT, lineHeight: 19, letterSpacing: -0.2 },
-  meta: { fontSize: 11, color: APP_GRAY, marginTop: 3 },
-  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
-  chip: { borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 },
-  chipText: { color: '#fff', fontSize: 10, fontWeight: '500' },
-  price: { fontSize: 16, fontWeight: '700', color: APP_ORANGE, letterSpacing: -0.3, marginTop: 4 },
+  title: { fontSize: 16, color: APP_TEXT, lineHeight: 22, letterSpacing: -0.3, fontWeight: '600' },
+  meta: { fontSize: 13, color: APP_GRAY, marginTop: 3 },
+  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 5 },
+  chip: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3 },
+  chipText: { color: '#fff', fontSize: 11, fontWeight: '500' },
+  price: { fontSize: 18, fontWeight: '700', color: APP_ORANGE, letterSpacing: -0.3, marginTop: 5 },
 });
 
 // ─── 主頁面 ───────────────────────────────────────────────
@@ -342,6 +432,8 @@ export default function BuyScreen() {
   const [showPlateFilter, setShowPlateFilter] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
 
   // 切換車輛類型時重置價格
   const isFirstMount = useRef(true);
@@ -521,6 +613,17 @@ export default function BuyScreen() {
               </Text>
               <Text style={[s.typeToggleArrow, (showPlateFilter || !!includedPlate) && { color: APP_ORANGE }]}>▾</Text>
             </TouchableOpacity>
+            {/* 進階篩選按鈕 */}
+            <TouchableOpacity
+              style={[s.plateToggle, (showAdvancedFilter || selectedTags.length > 0) && s.plateToggleActive]}
+              onPress={() => setShowAdvancedFilter(true)}
+              activeOpacity={0.6}
+            >
+              <Text style={[s.plateToggleText, (showAdvancedFilter || selectedTags.length > 0) && { color: APP_ORANGE, fontWeight: '600' }]}>
+                {selectedTags.length > 0 ? `進階(${selectedTags.length})` : '進階'}
+              </Text>
+              <Text style={[s.typeToggleArrow, { color: (showAdvancedFilter || selectedTags.length > 0) ? APP_ORANGE : APP_GRAY }]}>▾</Text>
+            </TouchableOpacity>
             {/* 結果數量 */}
             {total != null && (
               <Text style={s.countText}>共 {total} 輛</Text>
@@ -621,6 +724,17 @@ export default function BuyScreen() {
         />
       )}
 
+      {/* ── 進階篩選 Modal ── */}
+      {showAdvancedFilter && (
+        <AdvancedFilterModal
+          tags={(tagsData || []) as any[]}
+          selectedTags={selectedTags}
+          onToggle={(name) => setSelectedTags(prev => prev.includes(name) ? prev.filter(t => t !== name) : [...prev, name])}
+          onClear={() => { setSelectedTags([]); resetPage(); }}
+          onClose={() => setShowAdvancedFilter(false)}
+        />
+      )}
+
       {/* ── 車源列表 ── */}
       <FlatList
         data={allItems}
@@ -688,7 +802,7 @@ const s = StyleSheet.create({
   // 汽車/電單車切換（橙色）
   typeToggle: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, height: 42 },
   typeToggleText: { fontSize: 13, color: APP_ORANGE, fontWeight: '600' },
-  typeToggleArrow: { fontSize: 9, color: APP_ORANGE, marginLeft: 2, marginTop: 1 },
+  typeToggleArrow: { fontSize: 14, color: APP_ORANGE, marginLeft: 3 },
 
   // 跨境牌照進階選項
   plateToggle: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, height: 42 },
