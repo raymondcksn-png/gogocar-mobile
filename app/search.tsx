@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 import { trpc } from '../lib/trpc';
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../constants/data';
 
@@ -104,6 +106,65 @@ export default function SearchScreen() {
     Keyboard.dismiss();
     router.push(`/(tabs)/buy?search=${encodeURIComponent(kw.trim())}` as any);
   }, [saveHistory, router]);
+
+  // ── 語音輸入 ──
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const voiceMutation = trpc.voice.transcribe.useMutation({
+    onSuccess: (data: any) => {
+      setAiQuery(data.text || '');
+      setIsTranscribing(false);
+    },
+    onError: (err: any) => {
+      Alert.alert('語音識別失敗', err.message || '請稍後重試');
+      setIsTranscribing(false);
+    },
+  });
+
+  const startRecording = async () => {
+    try {
+      const { granted } = await Audio.requestPermissionsAsync();
+      if (!granted) {
+        Alert.alert('需要麥克風權限', '請在設定中允許麥克風權限以使用語音搜索');
+        return;
+      }
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      recordingRef.current = recording;
+      setIsRecording(true);
+    } catch (err) {
+      Alert.alert('錄音失敗', '無法啟動麥克風');
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recordingRef.current) return;
+    setIsRecording(false);
+    setIsTranscribing(true);
+    try {
+      await recordingRef.current.stopAndUnloadAsync();
+      const uri = recordingRef.current.getURI();
+      recordingRef.current = null;
+      if (!uri) throw new Error('No recording URI');
+      // 讀取檔案為 base64
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      // 調用後端 Whisper API
+      voiceMutation.mutate({
+        audioBase64: base64,
+        filename: 'voice-search.m4a',
+        contentType: 'audio/m4a',
+      });
+    } catch (err: any) {
+      Alert.alert('語音處理失敗', err.message || '請重試');
+      setIsTranscribing(false);
+    }
+  };
 
   // ── AI 搜索 ──
   const doAISearch = () => {
@@ -299,11 +360,38 @@ export default function SearchScreen() {
                 </TouchableOpacity>
               )}
             </View>
+                        {/* 麥克風按鈕 */}
+            <TouchableOpacity
+              style={[s.micBtn, isRecording && s.micBtnActive]}
+              onPress={isRecording ? stopRecording : startRecording}
+              disabled={isTranscribing}
+              activeOpacity={0.7}
+            >
+              {isTranscribing ? (
+                <ActivityIndicator size="small" color={APP_ORANGE} />
+              ) : (
+                <Text style={[s.micIcon, isRecording && s.micIconActive]}>
+                  {isRecording ? '⏹' : '🎙️'}
+                </Text>
+              )}
+            </TouchableOpacity>
             <TouchableOpacity style={s.cancelBtn} onPress={() => router.back()} activeOpacity={0.7}>
               <Text style={s.cancelBtnText}>取消</Text>
             </TouchableOpacity>
           </View>
-
+          {/* 語音提示 */}
+          {isRecording && (
+            <View style={s.recordingHint}>
+              <Text style={s.recordingDot}>●</Text>
+              <Text style={s.recordingText}>正在錄音… 請說出您想找的車（支援廣東話/普通話/英語/葡語）</Text>
+            </View>
+          )}
+          {isTranscribing && (
+            <View style={s.recordingHint}>
+              <ActivityIndicator size="small" color={APP_ORANGE} />
+              <Text style={s.recordingText}> AI 識別中…</Text>
+            </View>
+          )}
           {/* AI 搜索按鈕 */}
           <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
             <TouchableOpacity
@@ -649,4 +737,18 @@ const s = StyleSheet.create({
     elevation: 4,
   },
   applyBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  // 語音輸入樣式
+  micBtn: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: '#f2f2f7',
+    justifyContent: 'center', alignItems: 'center', marginLeft: 8,
+  },
+  micBtnActive: { backgroundColor: 'rgba(239,68,68,0.15)' },
+  micIcon: { fontSize: 20 },
+  micIconActive: { color: '#EF4444' },
+  recordingHint: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 8, gap: 6,
+  },
+  recordingDot: { fontSize: 12, color: '#EF4444' },
+  recordingText: { fontSize: 13, color: APP_GRAY },
 });

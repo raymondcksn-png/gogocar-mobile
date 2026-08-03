@@ -11,7 +11,7 @@ import {
   Pressable, Platform, Animated, PanResponder,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path } from 'react-native-svg';
 import { trpc, resolveImageUrl } from '../../lib/trpc';
@@ -422,16 +422,18 @@ export default function BuyScreen() {
 
   // 篩選狀態
   const [vehicleType, setVehicleType] = useState<VehicleType>('car');
-  const [sortBy, setSortBy] = useState('newest');
+  // 接收搜索頁傳來的參數
+  const params = useLocalSearchParams<{ search?: string; brand?: string; vehicleType?: string; minPrice?: string; maxPrice?: string; maxAge?: string; sortBy?: string }>();
+  const [sortBy, setSortBy] = useState(params.sortBy || 'newest');
   const [selectedBrandId, setSelectedBrandId] = useState<number | undefined>(undefined);
-  const [selectedBrandName, setSelectedBrandName] = useState('');
+  const [selectedBrandName, setSelectedBrandName] = useState(params.brand || '');
   const [priceIdx, setPriceIdx] = useState(0);
   const [ageIdx, setAgeIdx] = useState(0);
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const [includedPlate, setIncludedPlate] = useState<string | undefined>(undefined);
   const [showPlateFilter, setShowPlateFilter] = useState(false);
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState(params.search || '');
+  const [search, setSearch] = useState(params.search || '');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
 
@@ -544,28 +546,15 @@ export default function BuyScreen() {
         </View>
       </View>
 
-      {/* ── 搜索欄 ── */}
-      <View style={s.searchWrap}>
+      {/* ── 搜索欄（點擊跳搜索頁） ── */}
+      <TouchableOpacity style={s.searchWrap} activeOpacity={0.7} onPress={() => router.push('/search')}>
         <View style={s.searchBar}>
           <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" style={{ marginRight: 8 }}>
             <Path d="M21 21l-4.35-4.35M17 11A6 6 0 111 11a6 6 0 0116 0z" stroke={APP_GRAY} strokeWidth={2.2} strokeLinecap="round" />
           </Svg>
-          <TextInput
-            style={s.searchInput}
-            placeholder="輸入品牌、車系、年份..."
-            placeholderTextColor={APP_GRAY}
-            value={searchInput}
-            onChangeText={setSearchInput}
-            onSubmitEditing={handleSearch}
-            returnKeyType="search"
-          />
-          {searchInput.length > 0 && (
-            <TouchableOpacity onPress={() => { setSearchInput(''); setSearch(''); resetPage(); }}>
-              <Text style={{ color: APP_GRAY, fontSize: 15 }}>✕</Text>
-            </TouchableOpacity>
-          )}
+          <Text style={{ flex: 1, fontSize: 15, color: APP_GRAY }}>搜索品牌、車系、年份...</Text>
         </View>
-      </View>
+      </TouchableOpacity>
 
       {/* ── 篩選菜單欄（sticky，對齊 WebApp）── */}
       <View style={s.filterBar}>
