@@ -1,29 +1,93 @@
 /**
- * iPoint 積分頁 — 積分餘額 + 充值 + 消費記錄
- * API: trpc.ipoint.getBalance + trpc.ipoint.getTransactions
+ * iPoint 積分頁 — 積分餘額 + 微信支付充值 + 消費記錄
+ * Sprint D1: WeChat Pay H5 充值流程（WebView 方案，Expo Go 相容）
+ * API: trpc.ipoint.getBalance + trpc.ipoint.getTransactions + trpc.wechatPay.createOrder
  */
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  ActivityIndicator, Alert, Modal,
 } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
 import { trpc } from '../../lib/trpc';
 import { useAuth } from '../../contexts/AuthContext';
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../../constants/data';
 
+const RECHARGE_PLANS = [
+  { label: '100 iP', ipoint: 100, mop: 10, badge: '' },
+  { label: '300 iP', ipoint: 300, mop: 28, badge: '最受歡迎' },
+  { label: '500 iP', ipoint: 500, mop: 45, badge: '' },
+  { label: '1000 iP', ipoint: 1000, mop: 88, badge: '超值' },
+];
+
 export default function IPointScreen() {
   const router = useRouter();
   const { isLoggedIn, user } = useAuth();
+  const [selectedPlan, setSelectedPlan] = useState(1);
+  const [paying, setPaying] = useState(false);
+  const [payUrl, setPayUrl] = useState<string | null>(null);
+  const [showWebView, setShowWebView] = useState(false);
 
-  const { data: balanceData, isLoading: balanceLoading } = trpc.ipoint.getBalance.useQuery(
-    undefined,
-    { enabled: isLoggedIn }
+  const { data: balanceData, isLoading: balanceLoading, refetch: refetchBalance } = trpc.ipoint.getBalance.useQuery(
+    undefined, { enabled: isLoggedIn }
   );
+  const { data: txData, isLoading: txLoading, refetch: refetchTx } = trpc.ipoint.getTransactions.useQuery(
+    { page: 1, pageSize: 20 }, { enabled: isLoggedIn }
+  );
+  const { data: rateData } = trpc.wechatPay.getExchangeRate.useQuery();
 
-  const { data: txData, isLoading: txLoading } = trpc.ipoint.getTransactions.useQuery(
-    { page: 1, pageSize: 20 },
-    { enabled: isLoggedIn }
-  );
+  const createOrderMutation = trpc.wechatPay.createOrder.useMutation({
+    onSuccess: (data: any) => {
+      setPaying(false);
+      if (data?.h5Url) {
+        setPayUrl(data.h5Url);
+        setShowWebView(true);
+      } else {
+        Alert.alert('支付', '請在微信中完成支付');
+      }
+    },
+    onError: (err: any) => {
+      setPaying(false);
+      Alert.alert('支付失敗', err.message || '請稍後重試');
+    },
+  });
+
+  const handleRecharge = () => {
+    if (!isLoggedIn) {
+      Alert.alert('提示', '請先登入', [
+        { text: '去登入', onPress: () => router.push('/(auth)/login') },
+        { text: '取消', style: 'cancel' },
+      ]);
+      return;
+    }
+    const plan = RECHARGE_PLANS[selectedPlan];
+    Alert.alert(
+      '確認充值',
+      `充值 ${plan.ipoint} iPoint\n費用：澳門幣 MOP ${plan.mop}`,
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '微信支付',
+          onPress: () => {
+            setPaying(true);
+            createOrderMutation.mutate({
+              amount: plan.mop,
+              description: `GoGoCar 充值 ${plan.ipoint} iPoint`,
+              paymentType: 'ipoint_recharge',
+            } as any);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleWebViewClose = () => {
+    setShowWebView(false);
+    setPayUrl(null);
+    setTimeout(() => { refetchBalance(); refetchTx(); }, 1000);
+    Alert.alert('支付確認', '如已完成支付，iPoint 將在幾秒內到賬', [{ text: '確定' }]);
+  };
 
   if (!isLoggedIn) {
     return (
@@ -38,28 +102,56 @@ export default function IPointScreen() {
     );
   }
 
-  const balance = balanceData?.balance ?? user?.iPointBalance ?? 0;
+  const balance = balanceData?.balance ?? (user as any)?.iPointBalance ?? 0;
   const transactions = txData?.items || [];
+  const exchangeRate = (rateData as any)?.rate ?? 0.88;
 
   return (
     <View style={styles.container}>
-      {/* 頂部欄 */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>iPoint</Text>
       </View>
-
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* 餘額卡片 */}
         <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>iPoint 餘額</Text>
-          {balanceLoading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
+          {balanceLoading ? <ActivityIndicator color="#fff" size="small" /> : (
             <Text style={styles.balanceValue}>{balance.toLocaleString()}</Text>
           )}
           <Text style={styles.balanceUnit}>積分</Text>
-          <TouchableOpacity style={styles.rechargeBtn} activeOpacity={0.8}>
-            <Text style={styles.rechargeBtnText}>充值 iPoint</Text>
+        </View>
+
+        {/* 充值套餐 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>充值 iPoint</Text>
+          <Text style={styles.sectionHint}>匯率：MOP 1 ≈ CNY {exchangeRate.toFixed(2)}（微信支付以人民幣結算）</Text>
+          <View style={styles.planGrid}>
+            {RECHARGE_PLANS.map((plan, i) => (
+              <TouchableOpacity
+                key={i}
+                style={[styles.planCard, selectedPlan === i && styles.planCardActive]}
+                onPress={() => setSelectedPlan(i)}
+                activeOpacity={0.7}
+              >
+                {!!plan.badge && (
+                  <View style={styles.planBadge}>
+                    <Text style={styles.planBadgeText}>{plan.badge}</Text>
+                  </View>
+                )}
+                <Text style={[styles.planIpoint, selectedPlan === i && styles.planIpointActive]}>{plan.label}</Text>
+                <Text style={[styles.planPrice, selectedPlan === i && styles.planPriceActive]}>MOP {plan.mop}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TouchableOpacity
+            style={[styles.rechargeBtn, paying && styles.rechargeBtnDisabled]}
+            onPress={handleRecharge}
+            disabled={paying}
+            activeOpacity={0.8}
+          >
+            {paying ? <ActivityIndicator color="#fff" size="small" /> : (
+              <Text style={styles.rechargeBtnText}>微信支付充值 {RECHARGE_PLANS[selectedPlan].ipoint} iP</Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -95,9 +187,31 @@ export default function IPointScreen() {
             ))
           )}
         </View>
-
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* 微信支付 WebView Modal */}
+      <Modal visible={showWebView} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleWebViewClose}>
+        <View style={styles.webviewContainer}>
+          <View style={styles.webviewHeader}>
+            <Text style={styles.webviewTitle}>微信支付</Text>
+            <TouchableOpacity onPress={handleWebViewClose} style={styles.webviewClose}>
+              <Text style={styles.webviewCloseText}>完成</Text>
+            </TouchableOpacity>
+          </View>
+          {payUrl && (
+            <WebView
+              source={{ uri: payUrl }}
+              style={{ flex: 1 }}
+              onNavigationStateChange={(state) => {
+                if (state.url?.startsWith('gogocar://') || state.url?.includes('pay_success')) {
+                  handleWebViewClose();
+                }
+              }}
+            />
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -114,55 +228,29 @@ function ServiceItem({ icon, title, desc }: { icon: string; title: string; desc:
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: APP_BG },
-  header: {
-    backgroundColor: '#fff',
-    paddingTop: 56,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 0.5,
-    borderBottomColor: APP_BORDER,
-  },
+  header: { backgroundColor: '#fff', paddingTop: 56, paddingBottom: 12, paddingHorizontal: 16, borderBottomWidth: 0.5, borderBottomColor: APP_BORDER },
   headerTitle: { fontSize: 22, fontWeight: '700', color: APP_TEXT, letterSpacing: -0.5 },
-  balanceCard: {
-    margin: 16,
-    borderRadius: 20,
-    backgroundColor: APP_ORANGE,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: APP_ORANGE,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
-  },
+  balanceCard: { margin: 16, borderRadius: 20, backgroundColor: APP_ORANGE, padding: 24, alignItems: 'center', shadowColor: APP_ORANGE, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   balanceLabel: { fontSize: 14, color: 'rgba(255,255,255,0.8)', marginBottom: 8 },
   balanceValue: { fontSize: 48, fontWeight: '800', color: '#fff', letterSpacing: -2 },
-  balanceUnit: { fontSize: 14, color: 'rgba(255,255,255,0.8)', marginTop: 4, marginBottom: 20 },
-  rechargeBtn: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.4)',
-  },
-  rechargeBtnText: { fontSize: 15, fontWeight: '600', color: '#fff' },
-  section: {
-    backgroundColor: '#fff',
-    marginHorizontal: 0,
-    marginTop: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  sectionTitle: { fontSize: 15, fontWeight: '600', color: APP_TEXT, marginBottom: 12 },
+  balanceUnit: { fontSize: 14, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
+  section: { backgroundColor: '#fff', marginTop: 8, paddingHorizontal: 16, paddingVertical: 16 },
+  sectionTitle: { fontSize: 15, fontWeight: '600', color: APP_TEXT, marginBottom: 4 },
+  sectionHint: { fontSize: 11, color: APP_GRAY, marginBottom: 12 },
+  planGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
+  planCard: { width: '47%', borderRadius: 12, borderWidth: 1.5, borderColor: APP_BORDER, backgroundColor: APP_BG, padding: 14, alignItems: 'center', position: 'relative' },
+  planCardActive: { borderColor: APP_ORANGE, backgroundColor: `${APP_ORANGE}08` },
+  planBadge: { position: 'absolute', top: -8, right: 8, backgroundColor: APP_ORANGE, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
+  planBadgeText: { fontSize: 10, color: '#fff', fontWeight: '700' },
+  planIpoint: { fontSize: 18, fontWeight: '700', color: APP_TEXT, marginBottom: 4 },
+  planIpointActive: { color: APP_ORANGE },
+  planPrice: { fontSize: 13, color: APP_GRAY },
+  planPriceActive: { color: APP_ORANGE },
+  rechargeBtn: { height: 50, borderRadius: 14, backgroundColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center' },
+  rechargeBtnDisabled: { backgroundColor: '#ffb380' },
+  rechargeBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
   serviceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  serviceItem: {
-    width: '47%',
-    backgroundColor: APP_BG,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
+  serviceItem: { width: '47%', backgroundColor: APP_BG, borderRadius: 12, padding: 16, alignItems: 'center' },
   serviceIcon: { fontSize: 28, marginBottom: 8 },
   serviceTitle: { fontSize: 14, fontWeight: '600', color: APP_TEXT, marginBottom: 4 },
   serviceDesc: { fontSize: 12, color: APP_GRAY },
@@ -179,13 +267,11 @@ const styles = StyleSheet.create({
   guestIcon: { fontSize: 64, marginBottom: 16 },
   guestTitle: { fontSize: 20, fontWeight: '700', color: APP_TEXT, marginBottom: 8 },
   guestSubtitle: { fontSize: 14, color: APP_GRAY, marginBottom: 32, textAlign: 'center' },
-  loginBtn: {
-    width: 200,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: APP_ORANGE,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  loginBtn: { width: 200, height: 48, borderRadius: 24, backgroundColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center' },
   loginBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  webviewContainer: { flex: 1, backgroundColor: '#fff' },
+  webviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: APP_BORDER, backgroundColor: '#fff' },
+  webviewTitle: { fontSize: 17, fontWeight: '600', color: APP_TEXT },
+  webviewClose: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: `${APP_ORANGE}15` },
+  webviewCloseText: { fontSize: 15, fontWeight: '600', color: APP_ORANGE },
 });
