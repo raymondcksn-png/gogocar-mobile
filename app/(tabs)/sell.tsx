@@ -230,6 +230,13 @@ export default function SellScreen() {
         for (const [src, dest, transform] of map) {
           if (p[src] != null) { (updates as any)[dest] = transform(p[src]); newFilled.add(dest); }
         }
+        // 從原始文字提取電話號碼（AI prompt 不含電話提取，需前端正則）
+        const phoneMatch = aiText.match(/(?:SMS|TEL|電話|聯繫|聯絡|WhatsApp)?\s*(?:\+?853|\+?852|\+?86)?[-\s]?(\d[\d\s-]{6,14}\d)/i);
+        if (phoneMatch) {
+          const cleanPhone = phoneMatch[0].replace(/[^\d+]/g, '');
+          updates.contactPhone = cleanPhone.startsWith('+') ? cleanPhone : cleanPhone;
+          newFilled.add('contactPhone');
+        }
         if (p.transmission) {
           const t = p.transmission.toLowerCase();
           updates.transmission = t.includes('auto') || t.includes('自動') ? 'auto' : 'manual';
@@ -430,7 +437,7 @@ export default function SellScreen() {
               {form.brandId && (<>
                 <Text style={[s.fieldLabel, { marginTop: 10 }]}>車系</Text>
                 <TouchableOpacity style={s.selectBtn} onPress={() => setShowSeriesModal(true)} activeOpacity={0.8}>
-                  <Text style={form.seriesName ? s.selectBtnText : s.selectBtnPlaceholder}>{form.seriesName || '選擇車系'}</Text>
+                  <Text style={(form.seriesName || form.seriesId) ? s.selectBtnText : s.selectBtnPlaceholder}>{form.seriesName || (form.seriesId ? '（已自動選擇）' : '選擇車系')}</Text>
                   <Ionicons name="chevron-down" size={16} color={APP_GRAY} />
                 </TouchableOpacity>
               </>)}
@@ -525,10 +532,13 @@ export default function SellScreen() {
                   <Text style={s.fieldLabel}>預期售價(HKD/MOP) <Text style={s.required}>*</Text></Text>
                   <TextInput style={s.input} placeholder="132000" placeholderTextColor={APP_GRAY} keyboardType="numeric" value={form.price} onChangeText={v => setField('price', v)} />
                 </View>
-                <View style={s.col2}>
-                  <Text style={s.fieldLabel}>新車含稅價{autoFilledFields.has('originalPrice') && <Text style={s.autoTag}> 自動填充</Text>}</Text>
-                  <TextInput style={s.input} placeholder="可選" placeholderTextColor={APP_GRAY} keyboardType="numeric" value={form.originalPrice} onChangeText={v => setField('originalPrice', v)} />
-                </View>
+                {/* 新車含稅價：自動回填時才顯示，用戶不需手動填 */}
+                {(form.originalPrice || autoFilledFields.has('originalPrice')) && (
+                  <View style={s.col2}>
+                    <Text style={s.fieldLabel}>新車含稅價<Text style={s.autoTag}> 自動填充</Text></Text>
+                    <TextInput style={s.input} placeholder="可選" placeholderTextColor={APP_GRAY} keyboardType="numeric" value={form.originalPrice} onChangeText={v => setField('originalPrice', v)} />
+                  </View>
+                )}
               </View>
             </View>
 
@@ -698,8 +708,8 @@ const s = StyleSheet.create({
   typeBtnActive: { borderColor: APP_ORANGE, backgroundColor: `${APP_ORANGE}15` },
   typeBtnText: { fontSize: 13, fontWeight: '600', color: APP_GRAY },
   typeBtnTextActive: { color: APP_ORANGE },
-  fieldLabel: { fontSize: 12, color: '#6B7280', marginBottom: 6, fontWeight: '500' },
-  required: { color: APP_ORANGE },
+  fieldLabel: { fontSize: 13, color: '#6B7280', marginBottom: 6, fontWeight: '500' },
+  required: { color: APP_ORANGE, fontSize: 16, fontWeight: '700', lineHeight: 20 },
   autoTag: { color: '#15803D', fontSize: 11 },
   input: { borderWidth: 1.5, borderColor: APP_BORDER, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: APP_TEXT, backgroundColor: '#fafafa' },
   textarea: { borderWidth: 1.5, borderColor: APP_BORDER, borderRadius: 10, padding: 12, fontSize: 14, color: APP_TEXT, minHeight: 90, backgroundColor: '#fafafa' },
