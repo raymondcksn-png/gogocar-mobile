@@ -13,8 +13,8 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { trpc, resolveImageUrl, API_BASE_URL } from '../../lib/trpc';
 import { APP_ORANGE } from '../../constants/data';
 
-const { width: SCREEN_W } = Dimensions.get('window');
-const IMG_H = 260;
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+const IMG_H = Math.round(SCREEN_H * 0.40);
 
 const QUICK_QUESTIONS = [
   '可以試車嗎？', '價錢有得傾嗎？', '有冇事故記錄？',
