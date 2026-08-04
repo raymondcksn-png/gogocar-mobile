@@ -220,11 +220,21 @@ function BrandModal({ brands, selectedBrandId, onSelect, onClear, onClose }: {
     </Modal>
   );
 }
-// ─── 進階篩選 Modal（標籤篩選，大廠做法：底部 Sheet）────────────────────────
-function AdvancedFilterModal({ tags, selectedTags, onToggle, onClear, onClose }: {
+// 燃料類型標籤映射（這些標籤走 fuelType 篩選，不走 tag 篩選）
+const FUEL_TAG_MAP: Record<string, string> = {
+  '汽油': 'petrol',
+  '柴油': 'diesel',
+  '純電': 'electric',
+  '油電混合': 'hybrid',
+  '插電混合': 'pluginHybrid',
+};
+// ─── 進階篩選 Modal（標籤篩選 + 燃料類型，底部 Sheet）────────────────────────
+function AdvancedFilterModal({ tags, selectedTags, onToggle, onClear, onClose, selectedFuelType, onFuelTypeChange }: {
   tags: any[]; selectedTags: string[];
   onToggle: (name: string) => void;
   onClear: () => void; onClose: () => void;
+  selectedFuelType?: string;
+  onFuelTypeChange: (ft: string | undefined) => void;
 }) {
   const translateY = useRef(new Animated.Value(0)).current;
   const panResponder = useRef(
@@ -240,6 +250,10 @@ function AdvancedFilterModal({ tags, selectedTags, onToggle, onClear, onClose }:
       },
     })
   ).current;
+  // 將燃料類型標籤從普通標籤中分離
+  const fuelTags = tags.filter(t => FUEL_TAG_MAP[t.name]);
+  const normalTags = tags.filter(t => !FUEL_TAG_MAP[t.name]);
+  const hasAnyFilter = selectedTags.length > 0 || !!selectedFuelType;
   return (
     <Modal visible animationType="slide" transparent onRequestClose={onClose}>
       <View style={bm.overlay}>
@@ -254,32 +268,66 @@ function AdvancedFilterModal({ tags, selectedTags, onToggle, onClear, onClose }:
             </TouchableOpacity>
           </View>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 48 }}>
-            <Text style={bm.sectionLabel}>車輛標籤</Text>
-            <Text style={{ fontSize: 12, color: APP_GRAY, marginBottom: 12 }}>選擇你感興趣的車輛特色，可多選</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {tags.map(tag => {
-                const active = selectedTags.includes(tag.name);
-                return (
-                  <TouchableOpacity
-                    key={tag.id}
-                    onPress={() => onToggle(tag.name)}
-                    activeOpacity={0.7}
-                    style={[
-                      { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5,
-                        borderColor: active ? (tag.color || APP_ORANGE) : APP_BORDER,
-                        backgroundColor: active ? (tag.color || APP_ORANGE) + '18' : '#fff' }
-                    ]}
-                  >
-                    <Text style={{ fontSize: 14, color: active ? (tag.color || APP_ORANGE) : APP_TEXT, fontWeight: active ? '600' : '400' }}>
-                      {tag.name}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            {selectedTags.length > 0 && (
+            {/* 燃料類型（走 fuelType 篩選，單選）*/}
+            {fuelTags.length > 0 && (
+              <>
+                <Text style={bm.sectionLabel}>燃料類型</Text>
+                <Text style={{ fontSize: 12, color: APP_GRAY, marginBottom: 12 }}>按燃料類型篩選，只能單選</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 }}>
+                  {fuelTags.map(tag => {
+                    const ftValue = FUEL_TAG_MAP[tag.name];
+                    const active = selectedFuelType === ftValue;
+                    return (
+                      <TouchableOpacity
+                        key={tag.id}
+                        onPress={() => onFuelTypeChange(active ? undefined : ftValue)}
+                        activeOpacity={0.7}
+                        style={[
+                          { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5,
+                            borderColor: active ? (tag.color || APP_ORANGE) : APP_BORDER,
+                            backgroundColor: active ? (tag.color || APP_ORANGE) + '18' : '#fff' }
+                        ]}
+                      >
+                        <Text style={{ fontSize: 14, color: active ? (tag.color || APP_ORANGE) : APP_TEXT, fontWeight: active ? '600' : '400' }}>
+                          {tag.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            )}
+            {/* 車輛特色標籤（走 tag 篩選，可多選）*/}
+            {normalTags.length > 0 && (
+              <>
+                <Text style={[bm.sectionLabel, { marginTop: 16 }]}>車輛標籤</Text>
+                <Text style={{ fontSize: 12, color: APP_GRAY, marginBottom: 12 }}>選擇你感興趣的車輛特色，可多選</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {normalTags.map(tag => {
+                    const active = selectedTags.includes(tag.name);
+                    return (
+                      <TouchableOpacity
+                        key={tag.id}
+                        onPress={() => onToggle(tag.name)}
+                        activeOpacity={0.7}
+                        style={[
+                          { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5,
+                            borderColor: active ? (tag.color || APP_ORANGE) : APP_BORDER,
+                            backgroundColor: active ? (tag.color || APP_ORANGE) + '18' : '#fff' }
+                        ]}
+                      >
+                        <Text style={{ fontSize: 14, color: active ? (tag.color || APP_ORANGE) : APP_TEXT, fontWeight: active ? '600' : '400' }}>
+                          {tag.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            )}
+            {hasAnyFilter && (
               <TouchableOpacity
-                onPress={onClear}
+                onPress={() => { onClear(); onFuelTypeChange(undefined); }}
                 style={{ marginTop: 20, paddingVertical: 12, borderRadius: 10, backgroundColor: '#f5f5f5', alignItems: 'center' }}
               >
                 <Text style={{ fontSize: 14, color: APP_GRAY }}>清除標籤篩選</Text>
@@ -410,6 +458,7 @@ const pi = StyleSheet.create({
 
 // ─── 主頁面 ───────────────────────────────────────────────
 export default function BuyScreen() {
+  const router = useRouter();
   // 地區（AsyncStorage 持久化）
   const [region, setRegion] = useState<Region>('macau');
   const [regionLoaded, setRegionLoaded] = useState(false);
@@ -445,14 +494,15 @@ export default function BuyScreen() {
   const [search, setSearch] = useState(params.search || '');
   const [selectedTags, setSelectedTags] = useState<string[]>(params.tag ? [params.tag] : []);
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
-  // v3.2 智能搜索附加篩選（不顯示在 UI 但傳給 API）
-  const [aiFuelType] = useState(params.fuelType || undefined);
+  // v3.2 智能搜索附加篩選
   const [aiTransmission] = useState(params.transmission || undefined);
   const [aiMaxMileage] = useState(params.maxMileage ? Number(params.maxMileage) : undefined);
   const [aiMinYear] = useState(params.minYear ? Number(params.minYear) : undefined);
   const [aiSeats] = useState(params.seats ? Number(params.seats) : undefined);
   // age 和 maxAge 兩種 key 都接受
   const initMaxAge = params.maxAge ? Number(params.maxAge) : (params.age ? Number(params.age) : undefined);
+  // 燃料類型篩選（可由進階篩選 UI 修改，也可由智能搜索初始化）
+  const [selectedFuelType, setSelectedFuelType] = useState<string | undefined>(params.fuelType || undefined);
 
   // 切換車輛類型時重置價格
   const isFirstMount = useRef(true);
@@ -497,12 +547,12 @@ export default function BuyScreen() {
     maxAge: AGE_OPTIONS[ageIdx]?.value ?? initMaxAge,
     // v3.2 智能搜索附加篩選
     tag: selectedTags.length > 0 ? selectedTags[0] : undefined, // listPosts API 用單個 tag
-    fuelType: aiFuelType as any,
+    fuelType: selectedFuelType as any,
     transmission: aiTransmission as any,
     maxMileage: aiMaxMileage,
     minYear: aiMinYear,
     seats: aiSeats,
-  }), [vehicleType, search, sortBy, page, region, includedPlate, selectedBrandId, priceOptions, priceIdx, ageIdx, initMaxAge, selectedTags, aiFuelType, aiTransmission, aiMaxMileage, aiMinYear, aiSeats]);
+  }), [vehicleType, search, sortBy, page, region, includedPlate, selectedBrandId, priceOptions, priceIdx, ageIdx, initMaxAge, selectedTags, selectedFuelType, aiTransmission, aiMaxMileage, aiMinYear, aiSeats]);
 
   const { data, isLoading, refetch } = trpc.vehicle.listPosts.useQuery(
     queryParams as any,
@@ -538,7 +588,7 @@ export default function BuyScreen() {
     resetPage();
   };
 
-  const hasActiveFilters = !!selectedBrandId || priceIdx !== 0 || ageIdx !== 0 || !!includedPlate;
+  const hasActiveFilters = !!selectedBrandId || priceIdx !== 0 || ageIdx !== 0 || !!includedPlate || !!selectedFuelType || selectedTags.length > 0;
   const total = (data as any)?.total;
 
   if (!regionLoaded) {
@@ -742,9 +792,11 @@ export default function BuyScreen() {
         <AdvancedFilterModal
           tags={(tagsData || []) as any[]}
           selectedTags={selectedTags}
-          onToggle={(name) => setSelectedTags(prev => prev.includes(name) ? prev.filter(t => t !== name) : [...prev, name])}
+          onToggle={(name) => { setSelectedTags(prev => prev.includes(name) ? prev.filter(t => t !== name) : [...prev, name]); resetPage(); }}
           onClear={() => { setSelectedTags([]); resetPage(); }}
           onClose={() => setShowAdvancedFilter(false)}
+          selectedFuelType={selectedFuelType}
+          onFuelTypeChange={(ft) => { setSelectedFuelType(ft); resetPage(); }}
         />
       )}
 
