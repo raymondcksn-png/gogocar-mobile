@@ -191,12 +191,36 @@ export default function SellScreen() {
       const result = await aiParseMutation.mutateAsync({ text: aiText, vehicleType: form.vehicleType }) as any;
       if (result?.success && result?.parsed) {
         const p = result.parsed;
+        const matchedBrand = result.matchedBrand as { id: number; name: string } | null;
+        const bestMatch = result.bestMatch as any | null;
         const updates: Partial<FormData> = {};
         const newFilled = new Set<string>();
+
+        // 從 matchedBrand 回填品牌（後端已做數據庫匹配，有 ID）
+        if (matchedBrand?.id) {
+          updates.brandId = matchedBrand.id;
+          updates.brandName = matchedBrand.name;
+          newFilled.add('brandId'); newFilled.add('brandName');
+        } else if (p.brand) {
+          // fallback：AI 識別到品牌名但未匹配到數據庫，仍顯示文字
+          updates.brandName = p.brand;
+          newFilled.add('brandName');
+        }
+
+        // 從 bestMatch 回填車系和款式（後端已做最佳匹配）
+        if (bestMatch?.seriesId) {
+          updates.seriesId = bestMatch.seriesId;
+          updates.seriesName = bestMatch.seriesName || '';
+          newFilled.add('seriesId'); newFilled.add('seriesName');
+        }
+        if (bestMatch?.id) {
+          updates.modelId = bestMatch.id;
+          updates.modelName = bestMatch.modelName || '';
+          newFilled.add('modelId'); newFilled.add('modelName');
+        }
+
+        // 從 parsed 回填其他字段
         const map: [string, keyof FormData, (v: any) => any][] = [
-          ['brandId', 'brandId', v => v], ['brandName', 'brandName', v => v],
-          ['seriesId', 'seriesId', v => v], ['seriesName', 'seriesName', v => v],
-          ['modelId', 'modelId', v => v], ['modelName', 'modelName', v => v],
           ['year', 'year', v => String(v)], ['mileageKm', 'mileage', v => String(Math.round(v))],
           ['priceMOP', 'price', v => String(v)], ['color', 'color', v => v],
           ['seats', 'seats', v => String(v)], ['engineCapacity', 'engineCapacity', v => String(v)],
