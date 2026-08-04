@@ -28,6 +28,7 @@ const FUEL_TYPE_LABELS: Record<string, string> = {
   hybrid: '油電混合', pluginHybrid: '插電混合',
 };
 
+
 function maskPlate(plate: string, showFull: boolean): string {
   if (showFull || !plate) return plate;
   const parts = plate.split('-');
