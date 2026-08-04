@@ -71,7 +71,7 @@ export default function SearchScreen() {
       setAiResult({ summary: data.summary, filters: data.filters });
     },
     onError: (err: any) => {
-      Alert.alert('AI 搜索失敗', err.message || '請稍後重試');
+      Alert.alert('智能搜索失敗', err.message || '請稍後重試');
     },
   });
 
@@ -148,8 +148,8 @@ export default function SearchScreen() {
     setIsRecording(false);
     setIsTranscribing(true);
     try {
-      await recordingRef.current.stopAndUnloadAsync();
       const uri = recordingRef.current.getURI();
+      await recordingRef.current.stopAndUnloadAsync();
       recordingRef.current = null;
       if (!uri) throw new Error('No recording URI');
       // 讀取檔案為 base64
@@ -225,7 +225,7 @@ export default function SearchScreen() {
       <View style={s.tabRow}>
         {(['search', 'ai', 'filter'] as TabKey[]).map(t => {
           const active = tab === t;
-          const label = t === 'search' ? '🔍 搜索' : t === 'ai' ? '✨ AI搜索' : '⚙️ 篩選';
+          const label = t === 'search' ? '🔍 搜索' : t === 'ai' ? '✨ 智能搜索' : '⚙️ 篩選';
           return (
             <TouchableOpacity
               key={t}
@@ -389,7 +389,7 @@ export default function SearchScreen() {
           {isTranscribing && (
             <View style={s.recordingHint}>
               <ActivityIndicator size="small" color={APP_ORANGE} />
-              <Text style={s.recordingText}> AI 識別中…</Text>
+              <Text style={s.recordingText}> 智能識別中…</Text>
             </View>
           )}
           {/* AI 搜索按鈕 */}
@@ -401,9 +401,9 @@ export default function SearchScreen() {
               activeOpacity={0.8}
             >
               {semanticMutation.isPending ? (
-                <><ActivityIndicator size="small" color="#fff" /><Text style={s.aiSearchBtnText}> AI 分析中…</Text></>
+                <><ActivityIndicator size="small" color="#fff" /><Text style={s.aiSearchBtnText}> 智能分析中…</Text></>
               ) : (
-                <Text style={s.aiSearchBtnText}>✨ AI 智能搜車</Text>
+                <Text style={s.aiSearchBtnText}>✨ 智能搜車</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -413,7 +413,7 @@ export default function SearchScreen() {
             <View style={s.aiResultCard}>
               <View style={s.aiResultHeader}>
                 <Text style={s.aiResultIcon}>✅</Text>
-                <Text style={s.aiResultTitle}>AI 分析完成</Text>
+                <Text style={s.aiResultTitle}>智能分析完成</Text>
               </View>
               <Text style={s.aiResultSummary}>{aiResult.summary}</Text>
               {/* 篩選條件標籤 */}
@@ -452,7 +452,7 @@ export default function SearchScreen() {
           {/* AI 搜索提示 */}
           {!aiResult && !semanticMutation.isPending && (
             <View style={s.aiHintBox}>
-              <Text style={s.aiHintTitle}>💡 AI 搜索示例</Text>
+              <Text style={s.aiHintTitle}>💡 智能搜索示例</Text>
               {[
                 '預算 30 萬以內的日系 SUV',
                 '低里程自動波電動車',
