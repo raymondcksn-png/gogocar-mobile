@@ -1,12 +1,12 @@
 /**
  * 搜索篩選頁 — 對齊 WebApp /app/search
- * 三 Tab：搜索 / AI搜索 / 篩選
- * API: trpc.vehicle.publicHotSearches + trpc.vehicle.getBrandStats + trpc.vehicle.semanticSearch
+ * 三 Tab：搜索 / 智能搜索 / 篩選
+ * 智能搜索：語音為主入口（大廠標準），文字輔助，直接跳車源列表
  */
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, FlatList, ActivityIndicator, Alert, Keyboard,
+  TextInput, ActivityIndicator, Alert, Keyboard, Animated, Easing,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -44,6 +44,15 @@ const SORT_OPTIONS = [
   { label: '里程最少', value: 'mileage_asc' },
 ];
 
+// 智能搜索示例
+const AI_EXAMPLES = [
+  '預算 30 萬以內的日系 SUV',
+  '低里程自動波電動車',
+  '5 年內寶馬 3 系，預算 50 萬',
+  '七人座 MPV，適合家庭用',
+  '澳門本地車，10 萬以下代步車',
+];
+
 export default function SearchScreen() {
   const router = useRouter();
   const [tab, setTab] = useState<TabKey>('search');
@@ -53,9 +62,17 @@ export default function SearchScreen() {
   const [history, setHistory] = useState<string[]>([]);
   const inputRef = useRef<TextInput>(null);
 
-  // ── AI 搜索 Tab state ──
-  const [aiQuery, setAiQuery] = useState('');
+  // ── 智能搜索 Tab state ──
+  // 三個階段：idle → recording → transcribing → analyzing → result
+  type AiPhase = 'idle' | 'recording' | 'transcribing' | 'analyzing' | 'result';
+  const [aiPhase, setAiPhase] = useState<AiPhase>('idle');
+  const [aiTranscript, setAiTranscript] = useState(''); // 語音識別出的文字
   const [aiResult, setAiResult] = useState<{ summary: string; filters: Record<string, any> } | null>(null);
+  const [aiTextInput, setAiTextInput] = useState(''); // 文字輸入備用
+
+  // 錄音動畫
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
 
   // ── 篩選 Tab state ──
   const [filterVehicleType, setFilterVehicleType] = useState('');
@@ -66,12 +83,35 @@ export default function SearchScreen() {
   // ── API ──
   const { data: hotData } = trpc.vehicle.publicHotSearches.useQuery();
   const { data: brandStatsData } = trpc.vehicle.getBrandStats.useQuery();
+
   const semanticMutation = trpc.vehicle.semanticSearch.useMutation({
     onSuccess: (data: any) => {
       setAiResult({ summary: data.summary, filters: data.filters });
+      setAiPhase('result');
     },
     onError: (err: any) => {
-      Alert.alert('智能搜索失敗', err.message || '請稍後重試');
+      setAiPhase('idle');
+      Alert.alert('智能分析失敗', err.message || '請重試');
+    },
+  });
+
+  const voiceMutation = trpc.voice.transcribe.useMutation({
+    onSuccess: (data: any) => {
+      const text = data.text?.trim() || '';
+      if (!text) {
+        setAiPhase('idle');
+        Alert.alert('未能識別語音', '請重試或使用文字輸入');
+        return;
+      }
+      setAiTranscript(text);
+      setAiTextInput(text);
+      // 直接進入分析階段
+      setAiPhase('analyzing');
+      semanticMutation.mutate({ query: text });
+    },
+    onError: (err: any) => {
+      setAiPhase('idle');
+      Alert.alert('語音識別失敗', err.message || '請重試');
     },
   });
 
@@ -82,7 +122,7 @@ export default function SearchScreen() {
   const totalModels = brandList.reduce((s, b) => s + Number(b.modelCount), 0);
 
   // ── 載入搜索歷史 ──
-  React.useEffect(() => {
+  useEffect(() => {
     AsyncStorage.getItem(HISTORY_KEY).then(v => {
       if (v) setHistory(JSON.parse(v));
     });
@@ -107,20 +147,23 @@ export default function SearchScreen() {
     router.push(`/(tabs)/buy?search=${encodeURIComponent(kw.trim())}` as any);
   }, [saveHistory, router]);
 
-  // ── 語音輸入 ──
-  const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
+  // ── 錄音相關 ──
   const recordingRef = useRef<Audio.Recording | null>(null);
-  const voiceMutation = trpc.voice.transcribe.useMutation({
-    onSuccess: (data: any) => {
-      setAiQuery(data.text || '');
-      setIsTranscribing(false);
-    },
-    onError: (err: any) => {
-      Alert.alert('語音識別失敗', err.message || '請稍後重試');
-      setIsTranscribing(false);
-    },
-  });
+
+  const startPulse = () => {
+    pulseLoop.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.18, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    pulseLoop.current.start();
+  };
+
+  const stopPulse = () => {
+    pulseLoop.current?.stop();
+    pulseAnim.setValue(1);
+  };
 
   const startRecording = async () => {
     try {
@@ -137,42 +180,63 @@ export default function SearchScreen() {
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
       recordingRef.current = recording;
-      setIsRecording(true);
+      setAiPhase('recording');
+      setAiTranscript('');
+      setAiResult(null);
+      startPulse();
     } catch (err) {
-      Alert.alert('錄音失敗', '無法啟動麥克風');
+      Alert.alert('錄音失敗', '無法啟動麥克風，請檢查權限');
     }
   };
 
   const stopRecording = async () => {
     if (!recordingRef.current) return;
-    setIsRecording(false);
-    setIsTranscribing(true);
+    stopPulse();
+    setAiPhase('transcribing');
     try {
-      const uri = recordingRef.current.getURI();
-      await recordingRef.current.stopAndUnloadAsync();
+      // 關鍵修復：先取 URI，再 stop，再讀取文件
+      const rec = recordingRef.current;
       recordingRef.current = null;
-      if (!uri) throw new Error('No recording URI');
-      // 讀取檔案為 base64
-      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-      // 調用後端 Whisper API
+
+      // 先停止錄音
+      await rec.stopAndUnloadAsync();
+
+      // 停止後通過狀態獲取 URI（更可靠）
+      const status = await rec.getStatusAsync().catch(() => null);
+      let uri = (status as any)?.uri || rec.getURI();
+
+      if (!uri) {
+        // 最後嘗試：從 Audio.Recording 靜態方法獲取
+        throw new Error('錄音文件路徑無法獲取，請重試');
+      }
+
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
       voiceMutation.mutate({
         audioBase64: base64,
         filename: 'voice-search.m4a',
         contentType: 'audio/m4a',
       });
     } catch (err: any) {
+      setAiPhase('idle');
       Alert.alert('語音處理失敗', err.message || '請重試');
-      setIsTranscribing(false);
     }
   };
 
-  // ── AI 搜索 ──
-  const doAISearch = () => {
-    if (!aiQuery.trim()) return;
+  // ── 文字輸入觸發智能分析 ──
+  const doTextAiSearch = () => {
+    const q = aiTextInput.trim();
+    if (!q) return;
+    Keyboard.dismiss();
+    setAiTranscript(q);
     setAiResult(null);
-    semanticMutation.mutate({ query: aiQuery.trim() });
+    setAiPhase('analyzing');
+    semanticMutation.mutate({ query: q });
   };
 
+  // ── 套用智能篩選結果 → 跳買車頁 ──
   const applyAIFilters = () => {
     if (!aiResult) return;
     const f = aiResult.filters;
@@ -186,6 +250,14 @@ export default function SearchScreen() {
     if (f.sortBy && f.sortBy !== 'newest') parts.push(`sortBy=${f.sortBy}`);
     const qs = parts.length > 0 ? `?${parts.join('&')}` : '';
     router.push(`/(tabs)/buy${qs}` as any);
+  };
+
+  // ── 重置智能搜索 ──
+  const resetAiSearch = () => {
+    setAiPhase('idle');
+    setAiTranscript('');
+    setAiTextInput('');
+    setAiResult(null);
   };
 
   // ── 套用篩選 ──
@@ -230,7 +302,7 @@ export default function SearchScreen() {
             <TouchableOpacity
               key={t}
               style={[s.tabBtn, active && s.tabBtnActive]}
-              onPress={() => setTab(t)}
+              onPress={() => { setTab(t); if (t !== 'ai') resetAiSearch(); }}
               activeOpacity={0.75}
             >
               <Text style={[s.tabBtnText, active && s.tabBtnTextActive]}>{label}</Text>
@@ -337,135 +409,179 @@ export default function SearchScreen() {
         </ScrollView>
       )}
 
-      {/* ===== AI 搜索 Tab ===== */}
+      {/* ===== 智能搜索 Tab ===== */}
       {tab === 'ai' && (
-        <ScrollView style={s.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          {/* AI 搜索框 */}
-          <View style={s.searchRow}>
-            <View style={s.searchBox}>
-              <Text style={s.searchIcon}>✨</Text>
-              <TextInput
-                style={s.searchInput}
-                placeholder="描述你想要的車，例：預算30萬以內的日系SUV..."
-                placeholderTextColor={APP_GRAY}
-                value={aiQuery}
-                onChangeText={setAiQuery}
-                returnKeyType="search"
-                onSubmitEditing={doAISearch}
-                autoFocus={tab === 'ai'}
-              />
-              {aiQuery.length > 0 && (
-                <TouchableOpacity onPress={() => { setAiQuery(''); setAiResult(null); }} style={s.clearBtn}>
-                  <Text style={s.clearBtnText}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-                        {/* 麥克風按鈕 */}
-            <TouchableOpacity
-              style={[s.micBtn, isRecording && s.micBtnActive]}
-              onPress={isRecording ? stopRecording : startRecording}
-              disabled={isTranscribing}
-              activeOpacity={0.7}
-            >
-              {isTranscribing ? (
-                <ActivityIndicator size="small" color={APP_ORANGE} />
-              ) : (
-                <Text style={[s.micIcon, isRecording && s.micIconActive]}>
-                  {isRecording ? '⏹' : '🎙️'}
-                </Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity style={s.cancelBtn} onPress={() => router.back()} activeOpacity={0.7}>
-              <Text style={s.cancelBtnText}>取消</Text>
-            </TouchableOpacity>
-          </View>
-          {/* 語音提示 */}
-          {isRecording && (
-            <View style={s.recordingHint}>
-              <Text style={s.recordingDot}>●</Text>
-              <Text style={s.recordingText}>正在錄音… 請說出您想找的車（支援廣東話/普通話/英語/葡語）</Text>
-            </View>
-          )}
-          {isTranscribing && (
-            <View style={s.recordingHint}>
-              <ActivityIndicator size="small" color={APP_ORANGE} />
-              <Text style={s.recordingText}> 智能識別中…</Text>
-            </View>
-          )}
-          {/* AI 搜索按鈕 */}
-          <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
-            <TouchableOpacity
-              style={[s.aiSearchBtn, (!aiQuery.trim() || semanticMutation.isPending) && s.aiSearchBtnDisabled]}
-              onPress={doAISearch}
-              disabled={!aiQuery.trim() || semanticMutation.isPending}
-              activeOpacity={0.8}
-            >
-              {semanticMutation.isPending ? (
-                <><ActivityIndicator size="small" color="#fff" /><Text style={s.aiSearchBtnText}> 智能分析中…</Text></>
-              ) : (
-                <Text style={s.aiSearchBtnText}>✨ 智能搜車</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+        <ScrollView
+          style={s.body}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 40 }}
+        >
+          {/* ── 階段：idle（初始狀態）── */}
+          {aiPhase === 'idle' && (
+            <>
+              {/* 大麥克風按鈕 — 主入口 */}
+              <View style={s.aiHeroArea}>
+                <Text style={s.aiHeroTitle}>說出你想找的車</Text>
+                <Text style={s.aiHeroSub}>支援廣東話 · 普通話 · 英語 · 葡語</Text>
 
-          {/* AI 分析結果 */}
-          {aiResult && (
-            <View style={s.aiResultCard}>
-              <View style={s.aiResultHeader}>
-                <Text style={s.aiResultIcon}>✅</Text>
-                <Text style={s.aiResultTitle}>智能分析完成</Text>
+                <TouchableOpacity
+                  style={s.micHeroBtn}
+                  onPress={startRecording}
+                  activeOpacity={0.85}
+                >
+                  <Text style={s.micHeroIcon}>🎙️</Text>
+                  <Text style={s.micHeroBtnText}>按下開始說話</Text>
+                </TouchableOpacity>
+
+                <Text style={s.aiOrText}>— 或者文字輸入 —</Text>
+
+                {/* 文字輸入備用 */}
+                <View style={s.aiTextRow}>
+                  <View style={s.aiTextBox}>
+                    <Text style={s.aiTextBoxIcon}>✨</Text>
+                    <TextInput
+                      style={s.aiTextInput}
+                      placeholder="描述你想要的車..."
+                      placeholderTextColor={APP_GRAY}
+                      value={aiTextInput}
+                      onChangeText={setAiTextInput}
+                      returnKeyType="search"
+                      onSubmitEditing={doTextAiSearch}
+                    />
+                    {aiTextInput.length > 0 && (
+                      <TouchableOpacity onPress={() => setAiTextInput('')} style={s.clearBtn}>
+                        <Text style={s.clearBtnText}>✕</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {aiTextInput.trim().length > 0 && (
+                    <TouchableOpacity style={s.aiTextSendBtn} onPress={doTextAiSearch} activeOpacity={0.8}>
+                      <Text style={s.aiTextSendIcon}>→</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
-              <Text style={s.aiResultSummary}>{aiResult.summary}</Text>
-              {/* 篩選條件標籤 */}
-              <View style={s.aiTagWrap}>
-                {aiResult.filters.vehicleType && (
-                  <View style={[s.aiTag, { backgroundColor: 'rgba(249,115,22,0.12)' }]}>
-                    <Text style={[s.aiTagText, { color: '#EA580C' }]}>
-                      {aiResult.filters.vehicleType === 'car' ? '🚗 私家車' : '🏍️ 電單車'}
-                    </Text>
-                  </View>
-                )}
-                {aiResult.filters.brandName && (
-                  <View style={[s.aiTag, { backgroundColor: 'rgba(37,99,235,0.1)' }]}>
-                    <Text style={[s.aiTagText, { color: '#2563EB' }]}>🏷️ {aiResult.filters.brandName}</Text>
-                  </View>
-                )}
-                {aiResult.filters.maxPrice !== undefined && (
-                  <View style={[s.aiTag, { backgroundColor: 'rgba(22,163,74,0.1)' }]}>
-                    <Text style={[s.aiTagText, { color: '#16A34A' }]}>
-                      💰 最高 {(aiResult.filters.maxPrice / 10000).toFixed(0)} 萬
-                    </Text>
-                  </View>
-                )}
-                {aiResult.filters.maxAge !== undefined && (
-                  <View style={[s.aiTag, { backgroundColor: 'rgba(124,58,237,0.1)' }]}>
-                    <Text style={[s.aiTagText, { color: '#7C3AED' }]}>📅 {aiResult.filters.maxAge} 年內</Text>
-                  </View>
-                )}
+
+              {/* 示例提示 */}
+              <View style={s.aiExamplesBox}>
+                <Text style={s.aiExamplesTitle}>💡 試試這樣說</Text>
+                {AI_EXAMPLES.map(ex => (
+                  <TouchableOpacity
+                    key={ex}
+                    style={s.aiExampleItem}
+                    onPress={() => { setAiTextInput(ex); }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={s.aiExampleArrow}>›</Text>
+                    <Text style={s.aiExampleText}>{ex}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-              <TouchableOpacity style={s.applyAIBtn} onPress={applyAIFilters} activeOpacity={0.8}>
-                <Text style={s.applyAIBtnText}>查看符合條件的車源 →</Text>
+            </>
+          )}
+
+          {/* ── 階段：recording（錄音中）── */}
+          {aiPhase === 'recording' && (
+            <View style={s.aiActiveArea}>
+              <Text style={s.aiActiveTitle}>正在聆聽…</Text>
+              <Text style={s.aiActiveSub}>請說出你想找的車</Text>
+
+              {/* 動畫麥克風 */}
+              <Animated.View style={[s.micPulseOuter, { transform: [{ scale: pulseAnim }] }]}>
+                <TouchableOpacity style={s.micPulseBtn} onPress={stopRecording} activeOpacity={0.85}>
+                  <Text style={s.micPulseIcon}>🎙️</Text>
+                </TouchableOpacity>
+              </Animated.View>
+
+              <Text style={s.aiActiveHint}>點擊停止錄音</Text>
+              <Text style={s.aiActiveLang}>廣東話 · 普通話 · 英語 · 葡語</Text>
+            </View>
+          )}
+
+          {/* ── 階段：transcribing（語音識別中）── */}
+          {aiPhase === 'transcribing' && (
+            <View style={s.aiActiveArea}>
+              <ActivityIndicator size="large" color={APP_ORANGE} style={{ marginBottom: 16 }} />
+              <Text style={s.aiActiveTitle}>正在識別語音…</Text>
+              <Text style={s.aiActiveSub}>請稍候</Text>
+            </View>
+          )}
+
+          {/* ── 階段：analyzing（智能分析中）── */}
+          {aiPhase === 'analyzing' && (
+            <View style={s.aiActiveArea}>
+              {aiTranscript ? (
+                <View style={s.aiTranscriptBox}>
+                  <Text style={s.aiTranscriptLabel}>已識別：</Text>
+                  <Text style={s.aiTranscriptText}>「{aiTranscript}」</Text>
+                </View>
+              ) : null}
+              <ActivityIndicator size="large" color={APP_ORANGE} style={{ marginBottom: 16 }} />
+              <Text style={s.aiActiveTitle}>智能分析中…</Text>
+              <Text style={s.aiActiveSub}>正在為你匹配最合適的車源</Text>
+            </View>
+          )}
+
+          {/* ── 階段：result（分析完成）── */}
+          {aiPhase === 'result' && aiResult && (
+            <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+              {/* 識別文字回顯 */}
+              {aiTranscript ? (
+                <View style={s.aiTranscriptBox}>
+                  <Text style={s.aiTranscriptLabel}>你說的是：</Text>
+                  <Text style={s.aiTranscriptText}>「{aiTranscript}」</Text>
+                </View>
+              ) : null}
+
+              {/* 分析結果卡片 */}
+              <View style={s.aiResultCard}>
+                <View style={s.aiResultHeader}>
+                  <Text style={s.aiResultIcon}>✅</Text>
+                  <Text style={s.aiResultTitle}>智能分析完成</Text>
+                </View>
+                <Text style={s.aiResultSummary}>{aiResult.summary}</Text>
+
+                {/* 篩選條件標籤 */}
+                <View style={s.aiTagWrap}>
+                  {aiResult.filters.vehicleType && (
+                    <View style={[s.aiTag, { backgroundColor: 'rgba(249,115,22,0.12)' }]}>
+                      <Text style={[s.aiTagText, { color: '#EA580C' }]}>
+                        {aiResult.filters.vehicleType === 'car' ? '🚗 私家車' : '🏍️ 電單車'}
+                      </Text>
+                    </View>
+                  )}
+                  {aiResult.filters.brandName && (
+                    <View style={[s.aiTag, { backgroundColor: 'rgba(37,99,235,0.1)' }]}>
+                      <Text style={[s.aiTagText, { color: '#2563EB' }]}>🏷️ {aiResult.filters.brandName}</Text>
+                    </View>
+                  )}
+                  {aiResult.filters.maxPrice !== undefined && (
+                    <View style={[s.aiTag, { backgroundColor: 'rgba(22,163,74,0.1)' }]}>
+                      <Text style={[s.aiTagText, { color: '#16A34A' }]}>
+                        💰 最高 {(aiResult.filters.maxPrice / 10000).toFixed(0)} 萬
+                      </Text>
+                    </View>
+                  )}
+                  {aiResult.filters.maxAge !== undefined && (
+                    <View style={[s.aiTag, { backgroundColor: 'rgba(124,58,237,0.1)' }]}>
+                      <Text style={[s.aiTagText, { color: '#7C3AED' }]}>📅 {aiResult.filters.maxAge} 年內</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* 查看車源按鈕 */}
+                <TouchableOpacity style={s.applyAIBtn} onPress={applyAIFilters} activeOpacity={0.8}>
+                  <Text style={s.applyAIBtnText}>查看符合條件的車源 →</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* 重新搜索 */}
+              <TouchableOpacity style={s.retryBtn} onPress={resetAiSearch} activeOpacity={0.7}>
+                <Text style={s.retryBtnText}>🎙️ 重新搜索</Text>
               </TouchableOpacity>
             </View>
           )}
-
-          {/* AI 搜索提示 */}
-          {!aiResult && !semanticMutation.isPending && (
-            <View style={s.aiHintBox}>
-              <Text style={s.aiHintTitle}>💡 智能搜索示例</Text>
-              {[
-                '預算 30 萬以內的日系 SUV',
-                '低里程自動波電動車',
-                '5 年內寶馬 3 系，預算 50 萬',
-                '七人座 MPV，適合家庭用',
-              ].map(hint => (
-                <TouchableOpacity key={hint} style={s.aiHintItem} onPress={() => setAiQuery(hint)} activeOpacity={0.7}>
-                  <Text style={s.aiHintItemText}>→ {hint}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-          <View style={{ height: 40 }} />
         </ScrollView>
       )}
 
@@ -663,23 +779,117 @@ const s = StyleSheet.create({
   brandCount: { fontSize: 13, color: '#8e8e93' },
   brandArrow: { fontSize: 20, color: '#c7c7cc', lineHeight: 22 },
 
-  // AI 搜索
-  aiSearchBtn: {
-    height: 48, borderRadius: 24,
+  // ── 智能搜索：Hero 區域（idle 狀態）──
+  aiHeroArea: {
+    alignItems: 'center', paddingTop: 24, paddingHorizontal: 24, paddingBottom: 8,
+  },
+  aiHeroTitle: {
+    fontSize: 22, fontWeight: '700', color: APP_TEXT, marginBottom: 6,
+  },
+  aiHeroSub: {
+    fontSize: 13, color: APP_GRAY, marginBottom: 32,
+  },
+
+  // 大麥克風按鈕
+  micHeroBtn: {
+    width: 130, height: 130, borderRadius: 65,
     backgroundColor: APP_ORANGE,
     justifyContent: 'center', alignItems: 'center',
-    flexDirection: 'row', gap: 8,
-    shadowColor: APP_ORANGE, shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
-    elevation: 4, marginBottom: 16,
+    shadowColor: APP_ORANGE, shadowOpacity: 0.4, shadowRadius: 20, shadowOffset: { width: 0, height: 6 },
+    elevation: 8, marginBottom: 28,
   },
-  aiSearchBtnDisabled: { backgroundColor: '#e5e5ea', shadowOpacity: 0, elevation: 0 },
-  aiSearchBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  micHeroIcon: { fontSize: 44, marginBottom: 4 },
+  micHeroBtnText: { fontSize: 13, fontWeight: '600', color: '#fff' },
 
+  aiOrText: {
+    fontSize: 13, color: '#c7c7cc', marginBottom: 16,
+  },
+
+  // 文字輸入備用
+  aiTextRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%',
+  },
+  aiTextBox: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#fff', borderRadius: 12,
+    paddingHorizontal: 12, height: 44,
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 3, shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  aiTextBoxIcon: { fontSize: 16, marginRight: 6 },
+  aiTextInput: { flex: 1, fontSize: 15, color: APP_TEXT, paddingVertical: 0 },
+  aiTextSendBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: APP_ORANGE,
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: APP_ORANGE, shadowOpacity: 0.3, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  aiTextSendIcon: { fontSize: 20, color: '#fff', fontWeight: '700' },
+
+  // 示例
+  aiExamplesBox: {
+    marginHorizontal: 16, marginTop: 16,
+    backgroundColor: '#fff', borderRadius: 14, padding: 16,
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 3, shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  aiExamplesTitle: { fontSize: 14, fontWeight: '600', color: APP_TEXT, marginBottom: 12 },
+  aiExampleItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingVertical: 10, borderTopWidth: 0.5, borderTopColor: 'rgba(0,0,0,0.06)',
+  },
+  aiExampleArrow: { fontSize: 18, color: APP_ORANGE, fontWeight: '700', lineHeight: 22 },
+  aiExampleText: { fontSize: 14, color: '#3a3a3c', flex: 1 },
+
+  // ── 智能搜索：Active 區域（recording/transcribing/analyzing）──
+  aiActiveArea: {
+    alignItems: 'center', paddingTop: 60, paddingHorizontal: 24,
+  },
+  aiActiveTitle: {
+    fontSize: 20, fontWeight: '700', color: APP_TEXT, marginBottom: 8,
+  },
+  aiActiveSub: {
+    fontSize: 14, color: APP_GRAY, marginBottom: 40,
+  },
+  aiActiveHint: {
+    fontSize: 13, color: APP_GRAY, marginTop: 24,
+  },
+  aiActiveLang: {
+    fontSize: 12, color: '#c7c7cc', marginTop: 8,
+  },
+
+  // 動畫麥克風
+  micPulseOuter: {
+    width: 130, height: 130, borderRadius: 65,
+    backgroundColor: 'rgba(249,115,22,0.15)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  micPulseBtn: {
+    width: 100, height: 100, borderRadius: 50,
+    backgroundColor: APP_ORANGE,
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: APP_ORANGE, shadowOpacity: 0.5, shadowRadius: 16, shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  micPulseIcon: { fontSize: 44 },
+
+  // 語音識別文字回顯
+  aiTranscriptBox: {
+    backgroundColor: 'rgba(249,115,22,0.06)',
+    borderWidth: 1, borderColor: 'rgba(249,115,22,0.2)',
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10,
+    marginBottom: 20, width: '100%',
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
+  },
+  aiTranscriptLabel: { fontSize: 12, color: APP_ORANGE, fontWeight: '600', marginTop: 1 },
+  aiTranscriptText: { fontSize: 14, color: APP_TEXT, flex: 1, lineHeight: 20 },
+
+  // ── 智能搜索：Result 區域 ──
   aiResultCard: {
-    marginHorizontal: 16, marginBottom: 16,
     backgroundColor: 'rgba(249,115,22,0.05)',
     borderWidth: 1, borderColor: 'rgba(249,115,22,0.2)',
-    borderRadius: 14, padding: 16,
+    borderRadius: 14, padding: 16, marginBottom: 12,
   },
   aiResultHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   aiResultIcon: { fontSize: 18 },
@@ -689,20 +899,20 @@ const s = StyleSheet.create({
   aiTag: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   aiTagText: { fontSize: 11, fontWeight: '600' },
   applyAIBtn: {
-    height: 44, borderRadius: 22, backgroundColor: APP_ORANGE,
+    height: 48, borderRadius: 24, backgroundColor: APP_ORANGE,
     justifyContent: 'center', alignItems: 'center',
+    shadowColor: APP_ORANGE, shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   applyAIBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 
-  aiHintBox: {
-    marginHorizontal: 16, backgroundColor: '#fff',
-    borderRadius: 14, padding: 16,
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 3, shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
+  retryBtn: {
+    height: 44, borderRadius: 22,
+    borderWidth: 1.5, borderColor: APP_ORANGE,
+    justifyContent: 'center', alignItems: 'center',
+    backgroundColor: '#fff',
   },
-  aiHintTitle: { fontSize: 14, fontWeight: '600', color: APP_TEXT, marginBottom: 12 },
-  aiHintItem: { paddingVertical: 10, borderTopWidth: 0.5, borderTopColor: 'rgba(0,0,0,0.06)' },
-  aiHintItemText: { fontSize: 14, color: '#3a3a3c' },
+  retryBtnText: { fontSize: 15, fontWeight: '600', color: APP_ORANGE },
 
   // 篩選 Tab
   filterSection: {
@@ -737,18 +947,4 @@ const s = StyleSheet.create({
     elevation: 4,
   },
   applyBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
-  // 語音輸入樣式
-  micBtn: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: '#f2f2f7',
-    justifyContent: 'center', alignItems: 'center', marginLeft: 8,
-  },
-  micBtnActive: { backgroundColor: 'rgba(239,68,68,0.15)' },
-  micIcon: { fontSize: 20 },
-  micIconActive: { color: '#EF4444' },
-  recordingHint: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 8, gap: 6,
-  },
-  recordingDot: { fontSize: 12, color: '#EF4444' },
-  recordingText: { fontSize: 13, color: APP_GRAY },
 });
