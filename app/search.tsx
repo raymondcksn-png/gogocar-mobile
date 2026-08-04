@@ -39,9 +39,9 @@ const AGE_OPTIONS = [
 ];
 const SORT_OPTIONS = [
   { label: '最新', value: 'newest' },
-  { label: '價格低→高', value: 'price_asc' },
-  { label: '價格高→低', value: 'price_desc' },
-  { label: '里程最少', value: 'mileage_asc' },
+  { label: '價格低→高', value: 'priceAsc' },
+  { label: '價格高→低', value: 'priceDesc' },
+  { label: '里程最少', value: 'mileageAsc' },
 ];
 
 const AI_EXAMPLES = [
@@ -320,8 +320,17 @@ export default function SearchScreen() {
     if (f.minPrice !== undefined) parts.push(`minPrice=${f.minPrice}`);
     if (f.maxPrice !== undefined) parts.push(`maxPrice=${f.maxPrice}`);
     if (f.maxAge !== undefined) parts.push(`age=${f.maxAge}`);
+    if (f.seats !== undefined) parts.push(`seats=${f.seats}`);
     if (f.search) parts.push(`search=${encodeURIComponent(f.search)}`);
+    if (f.tag) parts.push(`tag=${encodeURIComponent(f.tag)}`);
     if (f.sortBy && f.sortBy !== 'newest') parts.push(`sortBy=${f.sortBy}`);
+    // v3.2 新增字段
+    if (f.fuelType) parts.push(`fuelType=${f.fuelType}`);
+    if (f.transmission) parts.push(`transmission=${f.transmission}`);
+    if (f.maxMileage !== undefined) parts.push(`maxMileage=${f.maxMileage}`);
+    if (f.minYear !== undefined) parts.push(`minYear=${f.minYear}`);
+    if (f.region) parts.push(`region=${f.region}`);
+    if (f.includedPlate) parts.push(`includedPlate=${f.includedPlate}`);
     const qs = parts.length > 0 ? `?${parts.join('&')}` : '';
     router.push(`/(tabs)/buy${qs}` as any);
   };

@@ -24,10 +24,10 @@ const APP_ORANGE_LIGHT = '#fff7ed';
 // ─── 常量 ────────────────────────────────────────────────
 const SORT_OPTIONS = [
   { label: '最新上架', value: 'newest' },
-  { label: '價格最低', value: 'price_asc' },
-  { label: '價格最高', value: 'price_desc' },
-  { label: '車齡最短', value: 'year_desc' },
-  { label: '里程最少', value: 'mileage_asc' },
+  { label: '價格最低', value: 'priceAsc' },
+  { label: '價格最高', value: 'priceDesc' },
+  { label: '車齡最短', value: 'ageAsc' },
+  { label: '里程最少', value: 'mileageAsc' },
 ];
 const CAR_PRICE_OPTIONS = [
   { label: '不限', min: undefined, max: undefined },
@@ -423,19 +423,36 @@ export default function BuyScreen() {
   // 篩選狀態
   const [vehicleType, setVehicleType] = useState<VehicleType>('car');
   // 接收搜索頁傳來的參數
-  const params = useLocalSearchParams<{ search?: string; brand?: string; vehicleType?: string; minPrice?: string; maxPrice?: string; maxAge?: string; sortBy?: string }>();
+  const params = useLocalSearchParams<{
+    search?: string; brand?: string; vehicleType?: string;
+    minPrice?: string; maxPrice?: string; maxAge?: string; sortBy?: string;
+    // v3.2 智能搜索新字段
+    fuelType?: string; transmission?: string;
+    maxMileage?: string; minYear?: string;
+    seats?: string; tag?: string;
+    age?: string; // search.tsx 用 age 傳遞 maxAge
+    region?: string; includedPlate?: string;
+  }>();
   const [sortBy, setSortBy] = useState(params.sortBy || 'newest');
   const [selectedBrandId, setSelectedBrandId] = useState<number | undefined>(undefined);
   const [selectedBrandName, setSelectedBrandName] = useState(params.brand || '');
   const [priceIdx, setPriceIdx] = useState(0);
   const [ageIdx, setAgeIdx] = useState(0);
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
-  const [includedPlate, setIncludedPlate] = useState<string | undefined>(undefined);
+  const [includedPlate, setIncludedPlate] = useState<string | undefined>(params.includedPlate || undefined);
   const [showPlateFilter, setShowPlateFilter] = useState(false);
   const [searchInput, setSearchInput] = useState(params.search || '');
   const [search, setSearch] = useState(params.search || '');
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>(params.tag ? [params.tag] : []);
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
+  // v3.2 智能搜索附加篩選（不顯示在 UI 但傳給 API）
+  const [aiFuelType] = useState(params.fuelType || undefined);
+  const [aiTransmission] = useState(params.transmission || undefined);
+  const [aiMaxMileage] = useState(params.maxMileage ? Number(params.maxMileage) : undefined);
+  const [aiMinYear] = useState(params.minYear ? Number(params.minYear) : undefined);
+  const [aiSeats] = useState(params.seats ? Number(params.seats) : undefined);
+  // age 和 maxAge 兩種 key 都接受
+  const initMaxAge = params.maxAge ? Number(params.maxAge) : (params.age ? Number(params.age) : undefined);
 
   // 切換車輛類型時重置價格
   const isFirstMount = useRef(true);
@@ -477,8 +494,15 @@ export default function BuyScreen() {
     brandId: selectedBrandId,
     minPrice: priceOptions[priceIdx]?.min,
     maxPrice: priceOptions[priceIdx]?.max,
-    maxAge: AGE_OPTIONS[ageIdx]?.value,
-  }), [vehicleType, search, sortBy, page, region, includedPlate, selectedBrandId, priceOptions, priceIdx, ageIdx]);
+    maxAge: AGE_OPTIONS[ageIdx]?.value ?? initMaxAge,
+    // v3.2 智能搜索附加篩選
+    tag: selectedTags.length > 0 ? selectedTags[0] : undefined, // listPosts API 用單個 tag
+    fuelType: aiFuelType as any,
+    transmission: aiTransmission as any,
+    maxMileage: aiMaxMileage,
+    minYear: aiMinYear,
+    seats: aiSeats,
+  }), [vehicleType, search, sortBy, page, region, includedPlate, selectedBrandId, priceOptions, priceIdx, ageIdx, initMaxAge, selectedTags, aiFuelType, aiTransmission, aiMaxMileage, aiMinYear, aiSeats]);
 
   const { data, isLoading, refetch } = trpc.vehicle.listPosts.useQuery(
     queryParams as any,
