@@ -9,6 +9,8 @@ import {
   Platform, StatusBar,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
+import Svg, { Path } from 'react-native-svg';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { trpc, resolveImageUrl, API_BASE_URL } from '../../lib/trpc';
 import { APP_ORANGE } from '../../constants/data';
@@ -457,25 +459,34 @@ export default function VehicleDetailScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.sellerName}>{sellerName}</Text>
-            <Text style={styles.sellerLabel}>GoGoCar 認證賣家</Text>
+            <Text style={styles.sellerLabel}>{seller?.role === 'dealer' ? '認證經銷商' : sellerName !== 'GoGoCar 認證賣家' ? '個人賣家' : 'GoGoCar 認證賣家'}</Text>
           </View>
         </View>
 
         {/* Layer 3: 操作按鈕 */}
         <View style={styles.actionRow}>
           <TouchableOpacity style={styles.chatBtn} onPress={handleChat}>
-            <Text style={styles.chatBtnText}>💬 站內聊天</Text>
+            <Ionicons name="chatbubble-ellipses-outline" size={16} color={APP_ORANGE} style={{ marginRight: 4 }} />
+            <Text style={styles.chatBtnText}>聊天</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.whatsappBtn} onPress={handleWhatsApp}>
-            <Text style={styles.whatsappBtnText}>📱 WhatsApp</Text>
+            {/* WhatsApp 官方圖標 */}
+            <Svg width={18} height={18} viewBox="0 0 24 24" style={{ marginRight: 4 }}>
+              <Path fill="#fff" d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+              <Path fill="#fff" d="M12 0C5.373 0 0 5.373 0 12c0 2.123.558 4.116 1.535 5.845L.057 23.5l5.797-1.52A11.93 11.93 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-5.006-1.373l-.359-.213-3.44.902.917-3.349-.234-.374A9.818 9.818 0 1112 21.818z" />
+            </Svg>
+            <Text style={styles.whatsappBtnText}>WhatsApp</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.wechatBtn} onPress={() => Linking.openURL('weixin://')}
-          >
-            <Text style={styles.wechatBtnText}>💬 微信</Text>
+          <TouchableOpacity style={styles.wechatBtn} onPress={() => Linking.openURL('weixin://')}>
+            {/* 微信官方圖標 */}
+            <Svg width={18} height={18} viewBox="0 0 24 24" style={{ marginRight: 4 }}>
+              <Path fill="#fff" d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 01.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.295.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-3.895-6.348-7.601-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 01.598.082l1.584.926a.272.272 0 00.14.047c.134 0 .24-.111.24-.247 0-.06-.023-.12-.038-.177l-.327-1.233a.49.49 0 01.177-.554 6.257 6.257 0 002.499-4.617c.012-3.582-3.016-6.068-6.058-6.126zm-2.58 3.274c.535 0 .969.44.969.983a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.543.434-.983.969-.983zm5.16 0c.535 0 .969.44.969.983a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.543.434-.983.969-.983z" />
+            </Svg>
+            <Text style={styles.wechatBtnText}>微信</Text>
           </TouchableOpacity>
           {sellerPhone ? (
             <TouchableOpacity style={styles.callBtn} onPress={() => Linking.openURL(`tel:${sellerPhone}`)}>
-              <Text style={styles.callBtnText}>📞</Text>
+              <Ionicons name="call" size={20} color="#fff" />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -645,12 +656,12 @@ const styles = StyleSheet.create({
   sellerName: { fontSize: 15, fontWeight: '600', color: '#1c1c1e' },
   sellerLabel: { fontSize: 12, color: '#8e8e93' },
   actionRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8 },
-  chatBtn: { flex: 1, height: 48, borderRadius: 10, borderWidth: 1.5, borderColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center' },
+  chatBtn: { flex: 1, height: 48, borderRadius: 10, borderWidth: 1.5, borderColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center', flexDirection: 'row' },
   chatBtnText: { fontSize: 15, color: APP_ORANGE, fontWeight: '600' },
-  whatsappBtn: { flex: 1, height: 48, borderRadius: 10, backgroundColor: '#25D366', justifyContent: 'center', alignItems: 'center' },
+  whatsappBtn: { flex: 1, height: 48, borderRadius: 10, backgroundColor: '#25D366', justifyContent: 'center', alignItems: 'center', flexDirection: 'row' },
   whatsappBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
-  callBtn: { width: 48, height: 48, borderRadius: 10, backgroundColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center' },
+  callBtn: { flex: 1, height: 48, borderRadius: 10, backgroundColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center', flexDirection: 'row' },
   callBtnText: { fontSize: 20 },
-  wechatBtn: { flex: 1, height: 48, borderRadius: 10, backgroundColor: '#07C160', justifyContent: 'center', alignItems: 'center' },
+  wechatBtn: { flex: 1, height: 48, borderRadius: 10, backgroundColor: '#07C160', justifyContent: 'center', alignItems: 'center', flexDirection: 'row' },
   wechatBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
 });
