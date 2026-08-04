@@ -513,34 +513,34 @@ const styles = StyleSheet.create({
 
   // 價格區塊
   priceSection: { backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16, borderBottomWidth: 0.5, borderBottomColor: 'rgba(0,0,0,0.06)' },
-  vehicleNo: { fontSize: 11, color: '#8e8e93', marginBottom: 4, letterSpacing: 0.5 },
-  price: { fontSize: 28, fontWeight: '700', color: APP_ORANGE, letterSpacing: -0.5 },
-  originalPrice: { fontSize: 12, color: '#8e8e93' },
-  vehicleTitle: { fontSize: 15, fontWeight: '600', color: '#1c1c1e', lineHeight: 22 },
+  vehicleNo: { fontSize: 12, color: '#8e8e93', marginBottom: 4, letterSpacing: 0.5 },
+  price: { fontSize: 30, fontWeight: '700', color: APP_ORANGE, letterSpacing: -0.5 },
+  originalPrice: { fontSize: 13, color: '#8e8e93' },
+  vehicleTitle: { fontSize: 17, fontWeight: '600', color: '#1c1c1e', lineHeight: 24 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
-  chip: { backgroundColor: '#f5f5f7', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
-  chipText: { fontSize: 11, color: '#3c3c43', fontWeight: '500' },
+  chip: { backgroundColor: '#f5f5f7', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 },
+  chipText: { fontSize: 13, color: '#3c3c43', fontWeight: '500' },
 
   // 通用 section
   section: { backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16, borderBottomWidth: 0.5, borderBottomColor: 'rgba(0,0,0,0.06)' },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: '#1c1c1e', marginBottom: 8 },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#1c1c1e', marginBottom: 10 },
 
   // 規格表
-  specRow: { flexDirection: 'row', alignItems: 'center', height: 44 },
+  specRow: { flexDirection: 'row', alignItems: 'center', height: 48 },
   specRowBorder: { borderBottomWidth: 0.5, borderBottomColor: 'rgba(0,0,0,0.06)' },
-  specLabel: { fontSize: 13, color: '#8e8e93', width: 88, flexShrink: 0 },
-  specValue: { fontSize: 13, color: '#1c1c1e', fontWeight: '500', flex: 1, textAlign: 'right' },
+  specLabel: { fontSize: 14, color: '#8e8e93', width: 96, flexShrink: 0 },
+  specValue: { fontSize: 14, color: '#1c1c1e', fontWeight: '500', flex: 1, textAlign: 'right' },
 
   // 配置亮點
   featuresWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  featureTag: { backgroundColor: '#FFF3E0', borderWidth: 1, borderColor: '#FFE0B2', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 5 },
-  featureTagText: { fontSize: 12, color: '#E65100', fontWeight: '500' },
+  featureTag: { backgroundColor: '#FFF3E0', borderWidth: 1, borderColor: '#FFE0B2', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
+  featureTagText: { fontSize: 13, color: '#E65100', fontWeight: '500' },
 
   // 車輛信息
-  infoText: { fontSize: 12, color: '#6b7280', marginBottom: 4 },
+  infoText: { fontSize: 13, color: '#6b7280', marginBottom: 5 },
 
   // 描述
-  description: { fontSize: 13, color: '#6b7280', lineHeight: 20 },
+  description: { fontSize: 14, color: '#6b7280', lineHeight: 22 },
 
   // 影片
   videoThumb: {
@@ -566,9 +566,9 @@ const styles = StyleSheet.create({
   // 相似車源
   similarCard: { width: 160, marginRight: 12 },
   similarImg: { width: 160, height: 110, borderRadius: 10 },
-  similarTitle: { fontSize: 12, color: '#1c1c1e', fontWeight: '600', marginTop: 6, lineHeight: 16 },
-  similarPrice: { fontSize: 13, color: APP_ORANGE, fontWeight: '700', marginTop: 4 },
-  similarMeta: { fontSize: 11, color: '#8e8e93', marginTop: 2 },
+  similarTitle: { fontSize: 13, color: '#1c1c1e', fontWeight: '600', marginTop: 6, lineHeight: 18 },
+  similarPrice: { fontSize: 14, color: APP_ORANGE, fontWeight: '700', marginTop: 4 },
+  similarMeta: { fontSize: 12, color: '#8e8e93', marginTop: 2 },
 
   // 底部操作欄
   bottomBar: {
@@ -582,17 +582,17 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#e0e0e0', backgroundColor: '#fff',
   },
   quickMsgChipActive: { borderColor: '#F57C00', borderWidth: 1.5, backgroundColor: '#FFF3E0' },
-  quickMsgText: { fontSize: 12, color: '#3c3c43' },
+  quickMsgText: { fontSize: 13, color: '#3c3c43' },
   quickMsgTextActive: { color: '#E65100', fontWeight: '500' },
-  sellerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, gap: 10 },
-  sellerAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#f2f2f7', justifyContent: 'center', alignItems: 'center' },
-  sellerName: { fontSize: 13, fontWeight: '600', color: '#1c1c1e' },
-  sellerLabel: { fontSize: 11, color: '#8e8e93' },
+  sellerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 10 },
+  sellerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f2f2f7', justifyContent: 'center', alignItems: 'center' },
+  sellerName: { fontSize: 15, fontWeight: '600', color: '#1c1c1e' },
+  sellerLabel: { fontSize: 12, color: '#8e8e93' },
   actionRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8 },
-  chatBtn: { flex: 1, height: 44, borderRadius: 10, borderWidth: 1.5, borderColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center' },
-  chatBtnText: { fontSize: 14, color: APP_ORANGE, fontWeight: '600' },
-  whatsappBtn: { flex: 1, height: 44, borderRadius: 10, backgroundColor: '#25D366', justifyContent: 'center', alignItems: 'center' },
-  whatsappBtnText: { fontSize: 14, color: '#fff', fontWeight: '600' },
-  callBtn: { width: 44, height: 44, borderRadius: 10, backgroundColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center' },
-  callBtnText: { fontSize: 18 },
+  chatBtn: { flex: 1, height: 48, borderRadius: 10, borderWidth: 1.5, borderColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center' },
+  chatBtnText: { fontSize: 15, color: APP_ORANGE, fontWeight: '600' },
+  whatsappBtn: { flex: 1, height: 48, borderRadius: 10, backgroundColor: '#25D366', justifyContent: 'center', alignItems: 'center' },
+  whatsappBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
+  callBtn: { width: 48, height: 48, borderRadius: 10, backgroundColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center' },
+  callBtnText: { fontSize: 20 },
 });
