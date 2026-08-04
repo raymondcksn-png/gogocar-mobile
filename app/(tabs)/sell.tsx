@@ -219,32 +219,47 @@ export default function SellScreen() {
           newFilled.add('modelId'); newFilled.add('modelName');
         }
 
-        // 從 parsed 回填其他字段
+        // 從 parsed 回填所有字段（後端升級版 prompt 已包含電話/副標題/地址/引擎標籤等）
         const map: [string, keyof FormData, (v: any) => any][] = [
-          ['year', 'year', v => String(v)], ['mileageKm', 'mileage', v => String(Math.round(v))],
-          ['priceMOP', 'price', v => String(v)], ['color', 'color', v => v],
-          ['seats', 'seats', v => String(v)], ['engineCapacity', 'engineCapacity', v => String(v)],
-          ['fuelType', 'fuelType', v => v], ['description', 'description', v => v],
+          ['year', 'year', v => String(v)],
+          ['mileageKm', 'mileage', v => String(Math.round(v))],
+          ['priceMOP', 'price', v => String(v)],
+          ['color', 'color', v => v],
+          ['seats', 'seats', v => String(v)],
+          ['engineCapacity', 'engineCapacity', v => String(v)],
+          ['fuelType', 'fuelType', v => v],
+          ['description', 'description', v => v],
           ['vehicleType', 'vehicleType', v => v],
+          ['address', 'address', v => v],
+          ['subtitle', 'subtitle', v => v],  // 副標題（如 1.5T渦輪）
         ];
         for (const [src, dest, transform] of map) {
           if (p[src] != null) { (updates as any)[dest] = transform(p[src]); newFilled.add(dest); }
         }
-        // 從原始文字提取電話號碼（AI prompt 不含電話提取，需前端正則）
-        const phoneMatch = aiText.match(/(?:SMS|TEL|電話|聯繫|聯絡|WhatsApp)?\s*(?:\+?853|\+?852|\+?86)?[-\s]?(\d[\d\s-]{6,14}\d)/i);
-        if (phoneMatch) {
-          const cleanPhone = phoneMatch[0].replace(/[^\d+]/g, '');
-          updates.contactPhone = cleanPhone.startsWith('+') ? cleanPhone : cleanPhone;
+        // 電話：優先用後端提取的 contactPhone，fallback 前端正則
+        if (p.contactPhone) {
+          updates.contactPhone = p.contactPhone;
           newFilled.add('contactPhone');
+        } else {
+          const phoneMatch = aiText.match(/(?:SMS|TEL|電話|聯繫|聯絡|WhatsApp)?\s*(?:\+?853|\+?852|\+?86)?[-\s]?(\d[\d\s-]{6,14}\d)/i);
+          if (phoneMatch) {
+            const cleanPhone = phoneMatch[0].replace(/[^\d+]/g, '');
+            updates.contactPhone = cleanPhone;
+            newFilled.add('contactPhone');
+          }
         }
+        // 傳動：後端已規範化為 auto/manual
         if (p.transmission) {
           const t = p.transmission.toLowerCase();
-          updates.transmission = t.includes('auto') || t.includes('自動') ? 'auto' : 'manual';
+          updates.transmission = (t === 'auto' || t.includes('auto') || t.includes('自動')) ? 'auto' : 'manual';
           newFilled.add('transmission');
         }
         setForm(prev => ({ ...prev, ...updates }));
         setAutoFilledFields(newFilled);
-        Alert.alert('識別完成', `已自動填充 ${newFilled.size} 個字段，請核對後提交`);
+        // 顯示識別結果（含拼寫修正提示）
+        const correctionNote = p.correctedInput ? `\n（已修正：${p.correctedInput}）` : '';
+        const confidenceNote = (p.confidence != null && p.confidence < 70) ? `\n（識別置信度 ${p.confidence}%，請仔細核對）` : '';
+        Alert.alert('識別完成', `已自動填充 ${newFilled.size} 個字段，請核對後提交${correctionNote}${confidenceNote}`);
         setActiveTab('manual');
       } else {
         Alert.alert('識別失敗', result?.error || '無法解析，請手動填寫');
