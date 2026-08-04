@@ -116,6 +116,13 @@ export default function VehicleDetailScreen() {
   const vin = (post as any)?.vin || '';
   const inspectionExpiry = (post as any)?.inspectionExpiry || '';
   const insuranceExpiry = (post as any)?.insuranceExpiry || '';
+  // 更多參數
+  const originCountry = (post as any)?.originCountry || '';
+  const totalWeight = (post as any)?.totalWeight || null;
+  const frontTire = (post as any)?.frontTire || '';
+  const rearTire = (post as any)?.rearTire || '';
+  // 證件照
+  const documents: { id: number; docType: string; url: string }[] = (data as any)?.documents || [];
   // 粵港澳三地市場字段（v3.1）
   const registrationRegion: string = (post as any)?.registrationRegion || 'macau';
   const rawPlates = (post as any)?.includedPlates;
@@ -319,6 +326,51 @@ export default function VehicleDetailScreen() {
           </View>
         )}
 
+        {/* 更多參數 */}
+        {(originCountry || totalWeight || frontTire || rearTire) && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>更多參數</Text>
+            {originCountry ? <Text style={styles.infoText}>來源地：{originCountry}</Text> : null}
+            {totalWeight ? <Text style={styles.infoText}>整備重量：{totalWeight} kgs</Text> : null}
+            {frontTire ? <Text style={styles.infoText}>前輪胎：{frontTire}</Text> : null}
+            {rearTire ? <Text style={styles.infoText}>後輪胎：{rearTire}</Text> : null}
+          </View>
+        )}
+        {/* 證件信息 */}
+        {documents.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>證件信息</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+              {documents.map((doc) => {
+                const DOC_LABELS: Record<string, string> = {
+                  title_deed: '車契',
+                  registration_front: '登記止正面',
+                  registration_back: '登記止反面',
+                  macau_insurance: '澳門保險',
+                  permit_front: '粵澳批文正面',
+                  permit_back: '粵澳批文反面',
+                  hk_permit_front: '香港禁區紙正面',
+                  hk_permit_back: '香港禁區紙反面',
+                  mainland_license: '大陸行使證',
+                  hk_insurance: '香港保險',
+                  livrete: 'Livrete',
+                  inspection: '驗車紙',
+                  insurance: '保險單',
+                  other: '其他文件',
+                };
+                return (
+                  <TouchableOpacity
+                    key={doc.id}
+                    onPress={() => Linking.openURL(doc.url)}
+                    style={{ backgroundColor: '#f3f4f6', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 }}
+                  >
+                    <Text style={{ fontSize: 12, color: '#374151' }}>✓ {DOC_LABELS[doc.docType] || doc.docType}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
         {/* 車輛描述 */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>車輛描述</Text>
@@ -416,6 +468,10 @@ export default function VehicleDetailScreen() {
           </TouchableOpacity>
           <TouchableOpacity style={styles.whatsappBtn} onPress={handleWhatsApp}>
             <Text style={styles.whatsappBtnText}>📱 WhatsApp</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.wechatBtn} onPress={() => Linking.openURL('weixin://')}
+          >
+            <Text style={styles.wechatBtnText}>💬 微信</Text>
           </TouchableOpacity>
           {sellerPhone ? (
             <TouchableOpacity style={styles.callBtn} onPress={() => Linking.openURL(`tel:${sellerPhone}`)}>
@@ -595,4 +651,6 @@ const styles = StyleSheet.create({
   whatsappBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
   callBtn: { width: 48, height: 48, borderRadius: 10, backgroundColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center' },
   callBtnText: { fontSize: 20 },
+  wechatBtn: { flex: 1, height: 48, borderRadius: 10, backgroundColor: '#07C160', justifyContent: 'center', alignItems: 'center' },
+  wechatBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
 });
