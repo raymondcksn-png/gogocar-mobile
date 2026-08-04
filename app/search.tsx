@@ -68,6 +68,7 @@ export default function SearchScreen() {
   const [isCancelling, setIsCancelling] = useState(false); // 滑到取消區域
   const [aiTranscript, setAiTranscript] = useState('');
   const [aiResult, setAiResult] = useState<{ summary: string; filters: Record<string, any> } | null>(null);
+  // aiTextInput 保留用於識別結果編輯
   const [aiTextInput, setAiTextInput] = useState('');
   const [processingMsg, setProcessingMsg] = useState('正在識別語音…');
 
@@ -487,40 +488,28 @@ export default function SearchScreen() {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 120 }}
             >
-              {/* 文字輸入 */}
-              <View style={[s.searchRow, { paddingTop: 8 }]}>
-                <View style={s.searchBox}>
-                  <Text style={s.searchIcon}>✨</Text>
-                  <TextInput
-                    style={s.searchInput}
-                    placeholder="描述你想要的車，例：預算 30 萬..."
-                    placeholderTextColor={APP_GRAY}
-                    value={aiTextInput}
-                    onChangeText={setAiTextInput}
-                    returnKeyType="search"
-                    onSubmitEditing={doTextAiSearch}
-                  />
-                  {aiTextInput.length > 0 && (
-                    <TouchableOpacity onPress={() => setAiTextInput('')} style={s.clearBtn}>
-                      <Text style={s.clearBtnText}>✕</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-                {aiTextInput.trim().length > 0 && (
-                  <TouchableOpacity style={s.aiSendBtn} onPress={doTextAiSearch} activeOpacity={0.8}>
-                    <Text style={s.aiSendBtnText}>搜索</Text>
-                  </TouchableOpacity>
-                )}
+              {/* 純語音引導界面 */}
+              <View style={s.aiIdleCenter}>
+                <Text style={s.aiIdleTitle}>說出你想找的車</Text>
+                <Text style={s.aiIdleSub}>支援廣東話 · 普通話 · 英語 · 葡語</Text>
               </View>
 
               {/* 示例 */}
               <View style={s.aiExamplesBox}>
-                <Text style={s.aiExamplesTitle}>💡 智能搜索示例</Text>
+                <Text style={s.aiExamplesTitle}>💡 試試這樣說</Text>
                 {AI_EXAMPLES.map(ex => (
                   <TouchableOpacity
                     key={ex}
                     style={s.aiExampleItem}
-                    onPress={() => setAiTextInput(ex)}
+                    onPress={() => {
+                      // 點擊示例 → 直接觸發智能分析
+                      setAiTranscript(ex);
+                      setAiTextInput(ex);
+                      setAiResult(null);
+                      setAiPhase('processing');
+                      setProcessingMsg('智能分析中…');
+                      semanticMutation.mutate({ query: ex });
+                    }}
                     activeOpacity={0.7}
                   >
                     <Text style={s.aiExampleArrow}>→</Text>
@@ -825,13 +814,12 @@ const s = StyleSheet.create({
   brandCount: { fontSize: 13, color: '#8e8e93' },
   brandArrow: { fontSize: 20, color: '#c7c7cc', lineHeight: 22 },
 
-  // 智能搜索 — 文字發送按鈕
-  aiSendBtn: {
-    height: 44, paddingHorizontal: 16, borderRadius: 22,
-    backgroundColor: APP_ORANGE,
-    justifyContent: 'center', alignItems: 'center',
+  // 智能搜索 — 純語音引導
+  aiIdleCenter: {
+    alignItems: 'center', paddingTop: 32, paddingBottom: 24,
   },
-  aiSendBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  aiIdleTitle: { fontSize: 22, fontWeight: '700', color: APP_TEXT, marginBottom: 6 },
+  aiIdleSub: { fontSize: 13, color: APP_GRAY },
 
   // 示例
   aiExamplesBox: {
