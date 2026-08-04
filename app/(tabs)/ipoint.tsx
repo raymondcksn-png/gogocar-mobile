@@ -1,7 +1,8 @@
 /**
- * iPoint 積分頁 — 積分餘額 + 微信支付充值 + 消費記錄
+ * iPoint 積分頁 — 積分餘額 + 任務中心 + 微信支付充值 + 消費記錄
  * Sprint D1: WeChat Pay H5 充值流程（WebView 方案，Expo Go 相容）
- * API: trpc.ipoint.getBalance + trpc.ipoint.getTransactions + trpc.wechatPay.createOrder
+ * Sprint S5: 加入任務中心（對齊 WebApp）
+ * API: trpc.ipoint.getBalance + trpc.ipoint.getActiveTasks + trpc.ipoint.getTransactions
  */
 import React, { useState } from 'react';
 import {
@@ -21,6 +22,20 @@ const RECHARGE_PLANS = [
   { label: '1000 iP', ipoint: 1000, mop: 88, badge: '超值' },
 ];
 
+const TASK_TYPE_LABEL: Record<string, string> = {
+  daily: '每日',
+  streak: '連續',
+  one_time: '一次性',
+};
+
+const TRIGGER_LABEL: Record<string, string> = {
+  login: '每日登入',
+  post_vehicle: '發佈車源',
+  complete_profile: '完善資料',
+  share: '分享',
+  review: '評價',
+};
+
 export default function IPointScreen() {
   const router = useRouter();
   const { isLoggedIn, user } = useAuth();
@@ -32,10 +47,28 @@ export default function IPointScreen() {
   const { data: balanceData, isLoading: balanceLoading, refetch: refetchBalance } = trpc.ipoint.getBalance.useQuery(
     undefined, { enabled: isLoggedIn }
   );
+  const { data: tasksData, isLoading: tasksLoading, refetch: refetchTasks } = trpc.ipoint.getActiveTasks.useQuery(
+    undefined, { enabled: isLoggedIn }
+  );
   const { data: txData, isLoading: txLoading, refetch: refetchTx } = trpc.ipoint.getTransactions.useQuery(
     { page: 1, pageSize: 20 }, { enabled: isLoggedIn }
   );
   const { data: rateData } = trpc.wechatPay.getExchangeRate.useQuery();
+
+  const triggerTaskMutation = trpc.ipoint.triggerTask.useMutation({
+    onSuccess: (data: any) => {
+      refetchBalance();
+      refetchTasks();
+      refetchTx();
+      if (data?.rewards?.length > 0) {
+        const totalReward = data.rewards.reduce((sum: number, r: any) => sum + (r.reward || 0), 0);
+        Alert.alert('🎉 任務完成！', `獲得 +${totalReward} iPoint！`);
+      }
+    },
+    onError: (err: any) => {
+      Alert.alert('提示', err.message || '任務觸發失敗');
+    },
+  });
 
   const createOrderMutation = trpc.wechatPay.createOrder.useMutation({
     onSuccess: (data: any) => {
@@ -89,6 +122,17 @@ export default function IPointScreen() {
     Alert.alert('支付確認', '如已完成支付，iPoint 將在幾秒內到賬', [{ text: '確定' }]);
   };
 
+  const handleTriggerTask = (trigger: string, taskName: string) => {
+    if (trigger === 'login') {
+      Alert.alert('提示', '登入任務由系統自動觸發，每日登入即可獲得積分');
+      return;
+    }
+    Alert.alert('領取任務獎勵', `完成「${taskName}」任務？`, [
+      { text: '取消', style: 'cancel' },
+      { text: '確認', onPress: () => triggerTaskMutation.mutate({ trigger }) },
+    ]);
+  };
+
   if (!isLoggedIn) {
     return (
       <View style={styles.guestWrap}>
@@ -103,6 +147,7 @@ export default function IPointScreen() {
   }
 
   const balance = balanceData?.balance ?? (user as any)?.iPointBalance ?? 0;
+  const tasks: any[] = tasksData || [];
   const transactions = txData?.items || [];
   const exchangeRate = (rateData as any)?.rate ?? 0.88;
 
@@ -119,6 +164,78 @@ export default function IPointScreen() {
             <Text style={styles.balanceValue}>{balance.toLocaleString()}</Text>
           )}
           <Text style={styles.balanceUnit}>積分</Text>
+        </View>
+
+        {/* 任務中心 */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>✨ 任務中心</Text>
+            <Text style={styles.sectionHint}>完成任務免費獲取 iPoint</Text>
+          </View>
+          {tasksLoading ? (
+            <ActivityIndicator color={APP_ORANGE} style={{ paddingVertical: 20 }} />
+          ) : tasks.length === 0 ? (
+            <Text style={styles.empty}>暫無可用任務</Text>
+          ) : (
+            tasks.map((task: any) => {
+              const progress = task.progress;
+              const isCompleted = (() => {
+                if (!progress) return false;
+                if (task.taskType === 'one_time') return (progress.totalCompletions || 0) >= 1;
+                if (task.taskType === 'daily') {
+                  // Check if completed today
+                  if (!progress.lastCompletedAt) return false;
+                  const last = new Date(progress.lastCompletedAt);
+                  const today = new Date();
+                  return last.toDateString() === today.toDateString();
+                }
+                return false;
+              })();
+
+              const streakDays = progress?.currentStreak || 0;
+              const streakTarget = task.streakDays || 0;
+
+              return (
+                <View key={task.id} style={styles.taskItem}>
+                  <View style={styles.taskLeft}>
+                    <View style={styles.taskTitleRow}>
+                      <Text style={styles.taskName}>{task.name}</Text>
+                      <View style={[styles.taskTypeBadge, { backgroundColor: task.taskType === 'daily' ? '#FFF7ED' : task.taskType === 'streak' ? '#EFF6FF' : '#F0FDF4' }]}>
+                        <Text style={[styles.taskTypeBadgeText, { color: task.taskType === 'daily' ? APP_ORANGE : task.taskType === 'streak' ? '#1D4ED8' : '#15803D' }]}>
+                          {TASK_TYPE_LABEL[task.taskType] || task.taskType}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.taskTrigger}>
+                      {TRIGGER_LABEL[task.trigger] || task.trigger}
+                      {streakTarget > 0 ? `  連續 ${streakDays}/${streakTarget} 天` : ''}
+                    </Text>
+                    {task.description ? <Text style={styles.taskDesc}>{task.description}</Text> : null}
+                  </View>
+                  <View style={styles.taskRight}>
+                    <Text style={styles.taskReward}>+{task.reward} iP</Text>
+                    {task.bonusReward > 0 && streakTarget > 0 && (
+                      <Text style={styles.taskBonus}>達標額外+{task.bonusReward}</Text>
+                    )}
+                    <TouchableOpacity
+                      style={[
+                        styles.taskBtn,
+                        isCompleted && styles.taskBtnDone,
+                        task.trigger === 'login' && styles.taskBtnAuto,
+                      ]}
+                      onPress={() => !isCompleted && handleTriggerTask(task.trigger, task.name)}
+                      disabled={isCompleted || triggerTaskMutation.isPending}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.taskBtnText, isCompleted && styles.taskBtnTextDone, task.trigger === 'login' && styles.taskBtnTextAuto]}>
+                        {isCompleted ? '已完成' : task.trigger === 'login' ? '自動' : '領取'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })
+          )}
         </View>
 
         {/* 充值套餐 */}
@@ -235,8 +352,28 @@ const styles = StyleSheet.create({
   balanceValue: { fontSize: 48, fontWeight: '800', color: '#fff', letterSpacing: -2 },
   balanceUnit: { fontSize: 14, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
   section: { backgroundColor: '#fff', marginTop: 8, paddingHorizontal: 16, paddingVertical: 16 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionTitle: { fontSize: 15, fontWeight: '600', color: APP_TEXT, marginBottom: 4 },
   sectionHint: { fontSize: 11, color: APP_GRAY, marginBottom: 12 },
+  // Task styles
+  taskItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: APP_BORDER },
+  taskLeft: { flex: 1, marginRight: 12 },
+  taskTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  taskName: { fontSize: 14, fontWeight: '600', color: APP_TEXT },
+  taskTypeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  taskTypeBadgeText: { fontSize: 10, fontWeight: '600' },
+  taskTrigger: { fontSize: 12, color: APP_GRAY, marginBottom: 2 },
+  taskDesc: { fontSize: 11, color: APP_GRAY },
+  taskRight: { alignItems: 'center', minWidth: 60 },
+  taskReward: { fontSize: 15, fontWeight: '700', color: APP_ORANGE, marginBottom: 2 },
+  taskBonus: { fontSize: 10, color: '#16a34a', marginBottom: 6 },
+  taskBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: APP_ORANGE },
+  taskBtnDone: { backgroundColor: '#e5e7eb' },
+  taskBtnAuto: { backgroundColor: '#EFF6FF' },
+  taskBtnText: { fontSize: 12, fontWeight: '600', color: '#fff' },
+  taskBtnTextDone: { color: '#9ca3af' },
+  taskBtnTextAuto: { color: '#1D4ED8' },
+  // Plan styles
   planGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
   planCard: { width: '47%', borderRadius: 12, borderWidth: 1.5, borderColor: APP_BORDER, backgroundColor: APP_BG, padding: 14, alignItems: 'center', position: 'relative' },
   planCardActive: { borderColor: APP_ORANGE, backgroundColor: `${APP_ORANGE}08` },
