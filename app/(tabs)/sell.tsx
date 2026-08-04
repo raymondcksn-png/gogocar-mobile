@@ -227,7 +227,17 @@ export default function SellScreen() {
           ['color', 'color', v => v],
           ['seats', 'seats', v => String(v)],
           ['engineCapacity', 'engineCapacity', v => String(v)],
-          ['fuelType', 'fuelType', v => v],
+          ['fuelType', 'fuelType', v => {
+            // 後端 fuelType fallback 可能返回中文，需轉為 APP 端按鈕 value
+            const fuelMap: Record<string, string> = {
+              '汽油': 'petrol', 'petrol': 'petrol', 'gasoline': 'petrol',
+              '柴油': 'diesel', 'diesel': 'diesel',
+              '純電': 'electric', 'electric': 'electric', 'ev': 'electric', 'bev': 'electric',
+              '油電混合': 'hybrid', 'hybrid': 'hybrid', 'hev': 'hybrid',
+              '插電混合': 'pluginHybrid', 'pluginhybrid': 'pluginHybrid', 'phev': 'pluginHybrid',
+            };
+            return fuelMap[v] || fuelMap[(v || '').toLowerCase()] || v;
+          }],
           ['description', 'description', v => v],
           ['vehicleType', 'vehicleType', v => v],
           ['address', 'address', v => v],
