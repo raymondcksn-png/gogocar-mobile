@@ -104,7 +104,7 @@ export default function PostSuccessScreen() {
       ]);
     } else {
       setIsProcessing(true);
-      createWechatOrderMutation.mutate({ postId, publishPlan } as any);
+      createWechatOrderMutation.mutate({ postId, publishPlan, returnUrl: 'https://gogocar853.manus.space/app/my-posts' } as any);
     }
   };
 

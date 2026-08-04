@@ -70,7 +70,7 @@ export default function EditPostScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [moreExpanded, setMoreExpanded] = useState(false);
 
-  const { data, isLoading, error } = trpc.vehicle.getPostById.useQuery(
+  const { data, isLoading, error } = trpc.vehicle.getPostForEdit.useQuery(
     { id: postId },
     { enabled: !!postId && postId > 0 }
   );
