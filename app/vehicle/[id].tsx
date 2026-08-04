@@ -101,16 +101,22 @@ export default function VehicleDetailScreen() {
   const modelName = (post as any)?.modelName || '';
   const year = (post as any)?.year ? `${(post as any).year} 年` : '';
   const mileage = (post as any)?.mileage ? `${(post as any).mileage.toLocaleString()} km` : '';
-  const engine = (post as any)?.engineCapacity ? `${(post as any).engineCapacity} cc` : '';
+  // engineCapacity 可能是數字(cc)或字串(如'1.5T 渦輪')，數字才加 cc
+  const rawEngine = (post as any)?.engineCapacity;
+  const engine = rawEngine
+    ? (typeof rawEngine === 'number' ? `${rawEngine} cc` : String(rawEngine))
+    : '';
   const gear = (post as any)?.transmission ? ((post as any).transmission === 'auto' ? '自動波' : '手波') : '';
   const fuelType = (post as any)?.fuelType ? (FUEL_TYPE_LABELS[(post as any).fuelType] || (post as any).fuelType) : '';
-  const colorName = (post as any)?.colorName || '';
+  const subtitle = (post as any)?.subtitle || '';
+  const colorName = (post as any)?.colorName || (post as any)?.color || '';
   const seats = (post as any)?.seats || '';
   const doors = (post as any)?.doors || '';
   const horsepower = (post as any)?.horsepower || '';
   const sellerAddr = (post as any)?.address || '';
   const description = (post as any)?.description || '暫無描述';
-  const features: string[] = (post as any)?.features || [];
+  // features 優先讀 features 字段，fallback 到 tags（WebApp 配置亮點來源）
+  const features: string[] = (post as any)?.features || (post as any)?.tags || [];
   const plateNumber = (post as any)?.plateNumber || '';
   const showFullPlate = (post as any)?.showFullPlate || false;
   const registrationDate = (post as any)?.firstRegDate || (post as any)?.registrationDate || '';
@@ -269,6 +275,14 @@ export default function VehicleDetailScreen() {
             {originalPrice && <Text style={styles.originalPrice}>{originalPrice}</Text>}
           </View>
           <Text style={styles.vehicleTitle}>{title}</Text>
+          {/* subtitle 副標題灰底標籤（如「1.5T 渦輪」） */}
+          {subtitle ? (
+            <View style={{ marginTop: 6, marginBottom: 2 }}>
+              <View style={styles.subtitleBadge}>
+                <Text style={styles.subtitleBadgeText}>{subtitle}</Text>
+              </View>
+            </View>
+          ) : null}
           <View style={styles.chipRow}>
             {year ? <ChipTag label={year} /> : null}
             {mileage ? <ChipTag label={mileage} /> : null}
@@ -467,7 +481,7 @@ export default function VehicleDetailScreen() {
         <View style={styles.actionRow}>
           <TouchableOpacity style={styles.chatBtn} onPress={handleChat}>
             <Ionicons name="chatbubble-ellipses-outline" size={16} color={APP_ORANGE} style={{ marginRight: 4 }} />
-            <Text style={styles.chatBtnText}>聊天</Text>
+            <Text style={styles.chatBtnText}>站內聊天</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.whatsappBtn} onPress={handleWhatsApp}>
             {/* WhatsApp 官方圖標 */}
@@ -486,7 +500,8 @@ export default function VehicleDetailScreen() {
           </TouchableOpacity>
           {sellerPhone ? (
             <TouchableOpacity style={styles.callBtn} onPress={() => Linking.openURL(`tel:${sellerPhone}`)}>
-              <Ionicons name="call" size={20} color="#fff" />
+              <Ionicons name="call" size={16} color="#fff" style={{ marginRight: 4 }} />
+              <Text style={styles.callBtnText}>直接聯絡</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -587,6 +602,9 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
   chip: { backgroundColor: '#f5f5f7', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 },
   chipText: { fontSize: 13, color: '#3c3c43', fontWeight: '500' },
+  // 副標題灰底標籤
+  subtitleBadge: { backgroundColor: '#f3f4f6', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start' },
+  subtitleBadgeText: { fontSize: 13, color: '#374151', fontWeight: '500' },
 
   // 通用 section
   section: { backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16, borderBottomWidth: 0.5, borderBottomColor: 'rgba(0,0,0,0.06)' },
@@ -661,7 +679,7 @@ const styles = StyleSheet.create({
   whatsappBtn: { flex: 1, height: 48, borderRadius: 10, backgroundColor: '#25D366', justifyContent: 'center', alignItems: 'center', flexDirection: 'row' },
   whatsappBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
   callBtn: { flex: 1, height: 48, borderRadius: 10, backgroundColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center', flexDirection: 'row' },
-  callBtnText: { fontSize: 20 },
+  callBtnText: { fontSize: 13, color: '#fff', fontWeight: '600' },
   wechatBtn: { flex: 1, height: 48, borderRadius: 10, backgroundColor: '#07C160', justifyContent: 'center', alignItems: 'center', flexDirection: 'row' },
   wechatBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
 });
