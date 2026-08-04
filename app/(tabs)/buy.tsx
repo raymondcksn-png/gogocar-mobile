@@ -6,10 +6,11 @@
  */
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, TouchableOpacity, TextInput,
   ActivityIndicator, RefreshControl, Dimensions, ScrollView, Modal,
   Pressable, Platform, Animated, PanResponder,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -801,7 +802,7 @@ export default function BuyScreen() {
       )}
 
       {/* ── 車源列表 ── */}
-      <FlatList
+      <FlashList
         data={allItems}
         keyExtractor={item => String(item.id)}
         renderItem={({ item }) => <PostItem post={item} tagColorMap={tagColorMap} />}
@@ -826,7 +827,7 @@ export default function BuyScreen() {
               : <Text style={s.noMore}>已顯示全部車源</Text>
             : null
         }
-      />
+              />
     </View>
   );
 }

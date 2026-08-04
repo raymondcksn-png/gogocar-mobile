@@ -171,6 +171,13 @@ export default function SellScreen() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>發佈車源</Text>
+        <TouchableOpacity
+          style={styles.myPostsBtn}
+          onPress={() => router.push('/my-posts' as any)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.myPostsBtnText}>我的車源</Text>
+        </TouchableOpacity>
       </View>
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
 
@@ -400,8 +407,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: 0.5,
     borderBottomColor: APP_BORDER,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   headerTitle: { fontSize: 22, fontWeight: '700', color: APP_TEXT, letterSpacing: -0.5 },
+  myPostsBtn: {
+    borderWidth: 1,
+    borderColor: APP_ORANGE,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+  },
+  myPostsBtnText: { fontSize: 13, fontWeight: '600', color: APP_ORANGE },
   section: {
     backgroundColor: '#fff',
     marginTop: 8,
