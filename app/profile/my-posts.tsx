@@ -15,12 +15,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { trpc, resolveImageUrl } from '../../lib/trpc';
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../../constants/data';
 
-// 狀態 Tab（對齊 WebApp AppSell.tsx）
+// 狀態 Tab（對齊 WebApp AppSell.tsx + 新增「已過期」Tab）
 const STATUS_TABS = [
   { key: 'all',      label: '全部' },
   { key: 'active',   label: '在售' },
   { key: 'sold',     label: '已售' },
   { key: 'archived', label: '已下架' },
+  { key: 'expired',  label: '已過期' },
   { key: 'draft',    label: '草稿' },
 ];
 
@@ -32,7 +33,7 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string }> 
   archived: { label: '已下架', color: '#4B5563', bg: '#E5E7EB' },
   sold:     { label: '已售',   color: '#4B5563', bg: '#E5E7EB' },
   rejected: { label: '已拒絕', color: '#DC2626', bg: '#FEE2E2' },
-  expired:  { label: '已過期', color: '#9CA3AF', bg: '#F9FAFB' },
+  expired:  { label: '已過期', color: '#9CA3AF', bg: '#F9FAFB' }, // 發布期限到期，公開列表已不顯示，可重新發布
 };
 
 // 增值服務定義（publishPlan 對應後端 ipoint.publishVehicle）
@@ -253,10 +254,13 @@ export default function MyPostsScreen() {
 
   const renderItem = ({ item }: { item: any }) => {
     const img = resolveImageUrl(item.coverUrl || item.coverImageUrl);
-    const meta = STATUS_META[item.status] || { label: item.status, color: APP_GRAY, bg: '#f3f4f6' };
-    const isActive   = item.status === 'active';
-    const isArchived = item.status === 'archived';
-    const isSold     = item.status === 'sold';
+    // 使用 displayStatus（後端動態計算）顯示標籤，不用 status
+    const ds = item.displayStatus || item.status;
+    const meta = STATUS_META[ds] || { label: ds, color: APP_GRAY, bg: '#f3f4f6' };
+    const isActive   = ds === 'active';
+    const isArchived = ds === 'archived';
+    const isSold     = ds === 'sold';
+    const isExpired  = ds === 'expired'; // 發布期限到期，公開列表已不顯示
     const postTitle  = item.title || `${item.brandName || ''} ${item.modelName || ''}`.trim() || '此車源';
     const pinnedDays   = daysLeft(item.pinnedExpireAt);
     const featuredDays = daysLeft(item.featuredExpireAt);
@@ -340,6 +344,19 @@ export default function MyPostsScreen() {
           {isArchived && (
             <ActionBtn label="重新上架" icon="arrow-up-outline" bg="#FFF7ED" color={APP_ORANGE}
               onPress={() => updateStatusMut.mutate({ postId: item.id, status: 'active' })} />
+          )}
+
+          {/* 已過期：引導用戶重新發布（需再次支付發布費用） */}
+          {isExpired && (
+            <ActionBtn label="重新發布" icon="refresh-circle-outline" bg="#FFF7ED" color={APP_ORANGE}
+              onPress={() => Alert.alert(
+                '發布期限已到期',
+                '此車源的發布期限已結束，公開列表已不顯示。\n\n需重新發布並支付發布費用才能再次上架。',
+                [
+                  { text: '取消', style: 'cancel' },
+                  { text: '去發布', onPress: () => router.push('/(tabs)/sell') },
+                ]
+              )} />
           )}
 
           {isActive && (
