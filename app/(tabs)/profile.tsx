@@ -1,30 +1,122 @@
 /**
- * 個人中心頁 — 登入態/訪客態 + 登出（修復 bug）
- * 登出必須清除 SecureStore token，不能只調用後端 API
+ * 個人中心頁 — 完整對齊 WebApp AppMe.tsx
+ * S5 對齊：Hero 漸層 + 角色 badge + 數據統計 + 彩色圖標菜單 + 角色動態菜單
+ * 角色：personal（個人車主）/ dealer（車商）/ school（駕校校長）
  */
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Image, Alert, ActivityIndicator,
+  Image, Alert, ActivityIndicator, Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { trpc } from '../../lib/trpc';
 import { useAuth } from '../../contexts/AuthContext';
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../../constants/data';
 
-// ── 菜單項組件 ────────────────────────────────────────────────────────────────
-function MenuItem({
-  icon, label, onPress, danger, badge,
+// ── 角色配置 ──────────────────────────────────────────────────────────────────
+type RoleType = 'personal' | 'dealer' | 'school';
+
+const ROLE_META: Record<RoleType, { label: string; color: string }> = {
+  personal: { label: '個人車主', color: APP_ORANGE },
+  dealer: { label: '車商', color: '#2563EB' },
+  school: { label: '駕校校長', color: '#16A34A' },
+};
+
+// ── 彩色圖標組件（iOS 風格方形漸層圖標） ──────────────────────────────────────
+function IconBox({
+  name,
+  colors,
+  size = 20,
 }: {
-  icon: string; label: string; onPress: () => void; danger?: boolean; badge?: string;
+  name: React.ComponentProps<typeof Ionicons>['name'];
+  colors: [string, string];
+  size?: number;
 }) {
   return (
-    <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.7}>
-      <Text style={styles.menuIcon}>{icon}</Text>
-      <Text style={[styles.menuLabel, danger && styles.menuLabelDanger]}>{label}</Text>
-      {badge && <View style={styles.badge}><Text style={styles.badgeText}>{badge}</Text></View>}
-      <Text style={styles.menuArrow}>›</Text>
+    <LinearGradient
+      colors={colors}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.iconBox}
+    >
+      <Ionicons name={name} size={size} color="#fff" />
+    </LinearGradient>
+  );
+}
+
+// ── 菜單行組件 ─────────────────────────────────────────────────────────────────
+function MenuRow({
+  iconName,
+  iconColors,
+  label,
+  badge,
+  comingSoon,
+  onPress,
+  last,
+}: {
+  iconName: React.ComponentProps<typeof Ionicons>['name'];
+  iconColors: [string, string];
+  label: string;
+  badge?: string | number;
+  comingSoon?: boolean;
+  onPress?: () => void;
+  last?: boolean;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.menuRow, !last && styles.menuRowBorder]}
+      onPress={comingSoon ? () => Alert.alert('即將上線', '此功能即將推出，敬請期待') : onPress}
+      activeOpacity={0.7}
+    >
+      <IconBox name={iconName} colors={iconColors} />
+      <Text style={styles.menuRowLabel}>{label}</Text>
+      {comingSoon && (
+        <View style={styles.comingSoonBadge}>
+          <Text style={styles.comingSoonText}>即將上線</Text>
+        </View>
+      )}
+      {badge !== undefined && !comingSoon && (
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{badge}</Text>
+        </View>
+      )}
+      <Ionicons name="chevron-forward" size={16} color="#c7c7cc" />
     </TouchableOpacity>
+  );
+}
+
+// ── 菜單分組組件 ───────────────────────────────────────────────────────────────
+function MenuGroup({ title, children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.menuGroup}>
+      {title && <Text style={styles.menuGroupTitle}>{title}</Text>}
+      <View style={styles.menuGroupCard}>{children}</View>
+    </View>
+  );
+}
+
+// ── 數據統計組件 ───────────────────────────────────────────────────────────────
+function StatItem({
+  iconName,
+  label,
+  value,
+  border,
+}: {
+  iconName: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  value: string | number;
+  border?: boolean;
+}) {
+  return (
+    <View style={[styles.statItem, border && styles.statItemBorder]}>
+      <Text style={styles.statValue}>{value}</Text>
+      <View style={styles.statLabelRow}>
+        <Ionicons name={iconName} size={12} color={APP_ORANGE} style={{ marginRight: 3 }} />
+        <Text style={styles.statLabel}>{label}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -34,40 +126,33 @@ export default function ProfileScreen() {
   const { isLoggedIn, user, logout } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
 
-  // 嘗試調用後端 logout（可選，失敗不影響本地登出）
   const logoutMutation = trpc.auth.logout.useMutation();
+  const { data: meData } = trpc.auth.me.useQuery(undefined, { enabled: isLoggedIn });
+  const { data: myPostsData } = trpc.vehicle.myPosts.useQuery(
+    undefined,
+    { enabled: isLoggedIn }
+  );
+  const { data: ipointData } = trpc.ipoint.getBalance.useQuery(undefined, { enabled: isLoggedIn });
 
-  /**
-   * 登出處理 — 修復版
-   * 1. 先清除本地 SecureStore token（最重要）
-   * 2. 嘗試通知後端（可選，失敗不影響）
-   * 3. 重置 React state
-   */
   const handleLogout = () => {
-    Alert.alert(
-      '確認登出',
-      '確定要登出嗎？',
-      [
-        { text: '取消', style: 'cancel' },
-        {
-          text: '登出',
-          style: 'destructive',
-          onPress: async () => {
-            setLoggingOut(true);
-            try {
-              // 先清除本地 token（最關鍵步驟）
-              await logout();
-              // 嘗試通知後端（可選）
-              logoutMutation.mutate().catch(() => {});
-            } catch (err) {
-              console.warn('[Profile] Logout error:', err);
-            } finally {
-              setLoggingOut(false);
-            }
-          },
+    Alert.alert('確認登出', '確定要登出嗎？', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '登出',
+        style: 'destructive',
+        onPress: async () => {
+          setLoggingOut(true);
+          try {
+            await logout();
+            logoutMutation.mutate().catch(() => {});
+          } catch (err) {
+            console.warn('[Profile] Logout error:', err);
+          } finally {
+            setLoggingOut(false);
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   // ── 訪客態 ─────────────────────────────────────────────────────────────────
@@ -78,10 +163,9 @@ export default function ProfileScreen() {
           <Text style={styles.headerTitle}>我的</Text>
         </View>
         <ScrollView>
-          {/* 訪客頭像區 */}
           <View style={styles.guestHero}>
             <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarPlaceholderText}>👤</Text>
+              <Ionicons name="person-outline" size={40} color={APP_GRAY} />
             </View>
             <Text style={styles.guestTitle}>未登入</Text>
             <Text style={styles.guestSubtitle}>登入後享受完整功能</Text>
@@ -93,23 +177,36 @@ export default function ProfileScreen() {
               <Text style={styles.loginBtnText}>登入 / 注冊</Text>
             </TouchableOpacity>
           </View>
-
-          {/* 訪客菜單 */}
-          <View style={styles.menuSection}>
-            <MenuItem icon="🚗" label="瀏覽車源" onPress={() => router.push('/(tabs)/buy')} />
-            <MenuItem icon="📞" label="聯繫我們" onPress={() => {}} />
-            <MenuItem icon="ℹ️" label="關於 GoGoCar" onPress={() => {}} />
-          </View>
+          <MenuGroup>
+            <MenuRow iconName="car-outline" iconColors={[APP_ORANGE, '#EA580C']} label="瀏覽車源" onPress={() => router.push('/(tabs)/buy')} />
+            <MenuRow iconName="call-outline" iconColors={['#3B82F6', '#2563EB']} label="聯繫我們" onPress={() => Linking.openURL('tel:+85366563101')} />
+            <MenuRow iconName="information-circle-outline" iconColors={['#6B7280', '#4B5563']} label="關於 GoGoCar" onPress={() => {}} last />
+          </MenuGroup>
         </ScrollView>
       </View>
     );
   }
 
-  // ── 登入態 ─────────────────────────────────────────────────────────────────
-  const avatarUrl = user?.avatarUrl;
-  const displayName = user?.name || `用戶 ${user?.phone?.slice(-4) || ''}`;
-  const phone = user?.phone ? `+853 ${user.phone}` : '';
-  const iPointBalance = user?.iPointBalance ?? 0;
+  // ── 登入態數據 ─────────────────────────────────────────────────────────────
+  const me = meData || user;
+  const rawRole = ((me as any)?.activeRole || (me as any)?.roleType || 'personal') as string;
+  const activeRole: RoleType = rawRole === 'personalOwner' ? 'personal' : (rawRole as RoleType) in ROLE_META ? (rawRole as RoleType) : 'personal';
+  const role = ROLE_META[activeRole] ?? ROLE_META['personal'];
+
+  const displayName = (me as any)?.name || (me as any)?.nickname || `用戶 ${(me as any)?.phone?.slice(-4) || ''}`;
+  const avatarUrl = (me as any)?.avatar || (me as any)?.avatarUrl;
+  const phone = (me as any)?.phone ? `${(me as any).phone.slice(0, 3)}****${(me as any).phone.slice(-4)}` : '未綁定手機';
+  const initial = displayName.charAt(0).toUpperCase();
+  const ipointBalance = ipointData?.balance ?? (me as any)?.iPointBalance ?? 0;
+  const postCount = (myPostsData as any)?.items?.length ?? 0;
+
+  const dealerMemberExpireAt = (me as any)?.dealerMemberExpireAt;
+  const dealerMemberActive = dealerMemberExpireAt && new Date(dealerMemberExpireAt) > new Date();
+  const dealerMemberDaysLeft = dealerMemberActive
+    ? Math.ceil((new Date(dealerMemberExpireAt).getTime() - Date.now()) / 86400000)
+    : 0;
+
+  const heroGradientStart = `${role.color}18`;
 
   return (
     <View style={styles.container}>
@@ -118,71 +215,185 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* 用戶信息卡片 */}
-        <View style={styles.userCard}>
-          <View style={styles.avatarWrap}>
-            {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarDefault}>
-                <Text style={styles.avatarDefaultText}>
-                  {displayName.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
-          </View>
-          <View style={styles.userInfo}>
-            <Text style={styles.userName}>{displayName}</Text>
-            <Text style={styles.userPhone}>{phone}</Text>
-          </View>
+        {/* ── Hero 區域 ── */}
+        <LinearGradient
+          colors={[heroGradientStart as any, '#ffffff']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.hero}
+        >
+          {/* 設置按鈕 */}
           <TouchableOpacity
-            style={styles.editBtn}
+            style={styles.heroActionBtn}
             onPress={() => router.push('/profile/edit')}
             activeOpacity={0.7}
           >
-            <Text style={styles.editBtnText}>編輯</Text>
+            <Ionicons name="settings-outline" size={18} color="#6b7280" />
           </TouchableOpacity>
-        </View>
 
-        {/* iPoint 快捷 */}
-        <TouchableOpacity
-          style={styles.ipointCard}
-          onPress={() => router.push('/(tabs)/ipoint')}
-          activeOpacity={0.8}
-        >
-          <View>
-            <Text style={styles.ipointLabel}>iPoint 餘額</Text>
-            <Text style={styles.ipointValue}>{iPointBalance.toLocaleString()} iP</Text>
+          {/* 頭像 + 信息 */}
+          <View style={styles.heroUserRow}>
+            <View style={styles.avatarWrap}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+              ) : (
+                <LinearGradient
+                  colors={[role.color, `${role.color}CC`]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.avatarDefault}
+                >
+                  <Text style={styles.avatarDefaultText}>{initial}</Text>
+                </LinearGradient>
+              )}
+              {/* 角色小圖標 */}
+              <View style={[styles.roleIconBadge, { backgroundColor: role.color }]}>
+                <Ionicons
+                  name={activeRole === 'dealer' ? 'ribbon-outline' : activeRole === 'school' ? 'school-outline' : 'person-outline'}
+                  size={10}
+                  color="#fff"
+                />
+              </View>
+            </View>
+
+            <View style={styles.heroUserInfo}>
+              <Text style={styles.heroName}>{displayName}</Text>
+              <View style={styles.heroMeta}>
+                <View style={[styles.roleBadge, { backgroundColor: `${role.color}18` }]}>
+                  <Text style={[styles.roleBadgeText, { color: role.color }]}>{role.label}</Text>
+                </View>
+                <Text style={styles.heroPhone}>{phone}</Text>
+              </View>
+              {activeRole === 'dealer' && (
+                <Text style={[styles.dealerMemberText, { color: dealerMemberActive ? '#D97706' : APP_GRAY }]}>
+                  {dealerMemberActive ? `✦ 年度會員 · 剩餘 ${dealerMemberDaysLeft} 天` : '普通車商帳號'}
+                </Text>
+              )}
+            </View>
+
+            {/* 切換身份按鈕 */}
+            <TouchableOpacity
+              style={styles.heroActionBtn}
+              onPress={() => router.push('/profile/edit')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="swap-horizontal-outline" size={18} color="#6b7280" />
+            </TouchableOpacity>
           </View>
-          <Text style={styles.ipointArrow}>›</Text>
-        </TouchableOpacity>
 
-        {/* 我的車源 */}
-        <View style={styles.menuSection}>
-          <Text style={styles.menuSectionTitle}>我的車源</Text>
-          <MenuItem icon="📋" label="我發佈的車源" onPress={() => router.push('/profile/my-posts')} />
-          <MenuItem icon="❤️" label="我的收藏" onPress={() => router.push('/profile/favorites')} />
-          <MenuItem icon="💬" label="我的消息" onPress={() => router.push('/profile/messages')} />
-          <MenuItem icon="🚗" label="發佈車源" onPress={() => router.push('/(tabs)/sell')} />
+          {/* iPoint 卡片（駕校不顯示） */}
+          {activeRole !== 'school' && (
+            <View style={styles.ipointCard}>
+              <LinearGradient
+                colors={['#F59E0B', '#D97706']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.ipointIconBox}
+              >
+                <Ionicons name="wallet-outline" size={18} color="#fff" />
+              </LinearGradient>
+              <View style={styles.ipointInfo}>
+                <Text style={styles.ipointLabel}>iPoint 餘額</Text>
+                <View style={styles.ipointValueRow}>
+                  <Text style={styles.ipointValue}>{ipointBalance.toLocaleString()}</Text>
+                  <Text style={styles.ipointUnit}> iP</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.rechargeBtn}
+                onPress={() => router.push('/(tabs)/ipoint')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.rechargeBtnText}>充值</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </LinearGradient>
+
+        {/* ── 數據統計 ── */}
+        <View style={styles.statsCard}>
+          <StatItem iconName="clipboard-outline" label="已發佈" value={postCount} />
+          <StatItem iconName="heart-outline" label="收藏" value={0} border />
+          <StatItem iconName="eye-outline" label="瀏覽過" value={0} />
         </View>
 
-        {/* 賬戶設置 */}
-        <View style={styles.menuSection}>
-          <Text style={styles.menuSectionTitle}>賬戶設置</Text>
-          <MenuItem icon="👤" label="個人資料" onPress={() => router.push('/profile/edit')} />
-          <MenuItem icon="🔔" label="通知設置" onPress={() => {}} />
-          <MenuItem icon="🔒" label="隱私設置" onPress={() => {}} />
-        </View>
+        {/* ── 個人車主菜單 ── */}
+        {activeRole === 'personal' && (
+          <>
+            <MenuGroup title="我的交易">
+              <MenuRow iconName="car-outline" iconColors={[APP_ORANGE, '#EA580C']} label="我的車源" badge={postCount > 0 ? postCount : undefined} onPress={() => router.push('/profile/my-posts')} />
+              <MenuRow iconName="heart-outline" iconColors={['#EF4444', '#DC2626']} label="我的收藏" onPress={() => router.push('/profile/favorites')} />
+              <MenuRow iconName="eye-outline" iconColors={['#8B5CF6', '#7C3AED']} label="瀏覽記錄" onPress={() => router.push('/profile/favorites')} />
+              <MenuRow iconName="document-text-outline" iconColors={['#06B6D4', '#0891B2']} label="我的訂單" onPress={() => {}} last />
+            </MenuGroup>
 
-        {/* 其他 */}
-        <View style={styles.menuSection}>
-          <Text style={styles.menuSectionTitle}>其他</Text>
-          <MenuItem icon="📞" label="聯繫客服" onPress={() => {}} />
-          <MenuItem icon="ℹ️" label="關於 GoGoCar" onPress={() => {}} />
-          <MenuItem icon="📄" label="服務條款" onPress={() => {}} />
-        </View>
+            <MenuGroup title="iPoint 錢包">
+              <MenuRow iconName="wallet-outline" iconColors={['#F59E0B', '#D97706']} label="iPoint 餘額" badge={ipointBalance > 0 ? ipointBalance : undefined} onPress={() => router.push('/(tabs)/ipoint')} />
+              <MenuRow iconName="add-circle-outline" iconColors={['#10B981', '#059669']} label="充值" onPress={() => router.push('/(tabs)/ipoint')} />
+              <MenuRow iconName="star-outline" iconColors={['#22C55E', '#16A34A']} label="賺 iPoint" onPress={() => router.push('/(tabs)/ipoint')} last />
+            </MenuGroup>
 
-        {/* 登出按鈕 */}
+            <MenuGroup title="iCar 服務">
+              <MenuRow iconName="book-outline" iconColors={['#3B82F6', '#2563EB']} label="考車報名" onPress={() => router.push('/(tabs)/exam')} />
+              <MenuRow iconName="construct-outline" iconColors={['#6366F1', '#4F46E5']} label="養車服務" comingSoon />
+              <MenuRow iconName="shield-checkmark-outline" iconColors={['#14B8A6', '#0D9488']} label="驗車服務" comingSoon last />
+            </MenuGroup>
+          </>
+        )}
+
+        {/* ── 車商菜單 ── */}
+        {activeRole === 'dealer' && (
+          <>
+            <MenuGroup title="車源管理">
+              <MenuRow iconName="car-outline" iconColors={[APP_ORANGE, '#EA580C']} label="我的車源" badge={postCount > 0 ? postCount : undefined} onPress={() => router.push('/profile/my-posts')} />
+              <MenuRow iconName="add-circle-outline" iconColors={['#22C55E', '#16A34A']} label="發佈車源" onPress={() => router.push('/(tabs)/sell')} />
+              <MenuRow iconName="list-outline" iconColors={['#8B5CF6', '#7C3AED']} label="批量管理" comingSoon={!dealerMemberActive} onPress={() => {}} last />
+            </MenuGroup>
+
+            <MenuGroup title="會員中心">
+              <MenuRow iconName="ribbon-outline" iconColors={['#F59E0B', '#B45309']} label="年度付費會員" onPress={() => {}} />
+              <MenuRow iconName="trophy-outline" iconColors={['#D97706', '#92400E']} label="會員權益" onPress={() => {}} last />
+            </MenuGroup>
+
+            <MenuGroup title="iPoint 錢包">
+              <MenuRow iconName="wallet-outline" iconColors={['#F59E0B', '#D97706']} label="iPoint 餘額" badge={ipointBalance > 0 ? ipointBalance : undefined} onPress={() => router.push('/(tabs)/ipoint')} />
+              <MenuRow iconName="add-circle-outline" iconColors={['#10B981', '#059669']} label="充值" onPress={() => router.push('/(tabs)/ipoint')} />
+              <MenuRow iconName="star-outline" iconColors={['#22C55E', '#16A34A']} label="賺 iPoint" onPress={() => router.push('/(tabs)/ipoint')} last />
+            </MenuGroup>
+          </>
+        )}
+
+        {/* ── 駕校校長菜單 ── */}
+        {activeRole === 'school' && (
+          <>
+            <MenuGroup title="我的駕校">
+              <MenuRow iconName="business-outline" iconColors={['#16A34A', '#15803D']} label="駕校資料" onPress={() => router.push('/(tabs)/exam')} />
+              <MenuRow iconName="bar-chart-outline" iconColors={['#0EA5E9', '#0284C7']} label="今日概覽" onPress={() => {}} last />
+            </MenuGroup>
+
+            <MenuGroup title="業務管理">
+              <MenuRow iconName="book-outline" iconColors={['#3B82F6', '#2563EB']} label="課程管理" onPress={() => {}} />
+              <MenuRow iconName="school-outline" iconColors={['#8B5CF6', '#7C3AED']} label="學員訂單" onPress={() => {}} />
+              <MenuRow iconName="people-outline" iconColors={['#10B981', '#059669']} label="教練管理" onPress={() => {}} last />
+            </MenuGroup>
+
+            <MenuGroup title="收入">
+              <MenuRow iconName="trending-up-outline" iconColors={['#F59E0B', '#D97706']} label="收入統計" onPress={() => {}} last />
+            </MenuGroup>
+          </>
+        )}
+
+        {/* ── 系統菜單（所有身份共用） ── */}
+        <MenuGroup title="系統">
+          <MenuRow iconName="chatbubble-outline" iconColors={['#3B82F6', '#2563EB']} label="消息" onPress={() => router.push('/profile/messages')} />
+          {activeRole !== 'school' && (
+            <MenuRow iconName="heart-outline" iconColors={['#EF4444', '#DC2626']} label="我的收藏" onPress={() => router.push('/profile/favorites')} />
+          )}
+          <MenuRow iconName="settings-outline" iconColors={['#94A3B8', '#64748B']} label="設置" onPress={() => router.push('/profile/edit')} />
+          <MenuRow iconName="swap-horizontal-outline" iconColors={['#6B7280', '#4B5563']} label="切換身份" onPress={() => Alert.alert('切換身份', '請前往個人資料頁面切換身份')} last />
+        </MenuGroup>
+
+        {/* ── 登出 ── */}
         <View style={styles.logoutWrap}>
           <TouchableOpacity
             style={[styles.logoutBtn, loggingOut && styles.logoutBtnDisabled]}
@@ -198,11 +409,9 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 版本號 */}
         <View style={{ paddingVertical: 16, alignItems: 'center' }}>
-          <Text style={{ fontSize: 12, color: APP_GRAY }}>GoGoCar v2.0 粵港澳三地二手車平台</Text>
+          <Text style={{ fontSize: 12, color: APP_GRAY }}>GoGoCar v2.0 · 粵港澳三地二手車平台</Text>
         </View>
-
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
@@ -220,13 +429,13 @@ const styles = StyleSheet.create({
     borderBottomColor: APP_BORDER,
   },
   headerTitle: { fontSize: 22, fontWeight: '700', color: APP_TEXT, letterSpacing: -0.5 },
+
   // 訪客
-  guestHero: { alignItems: 'center', paddingVertical: 40, backgroundColor: '#fff', marginBottom: 8 },
+  guestHero: { alignItems: 'center', paddingVertical: 48, backgroundColor: '#fff', marginBottom: 8 },
   avatarPlaceholder: {
     width: 80, height: 80, borderRadius: 40,
     backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center', marginBottom: 12,
   },
-  avatarPlaceholderText: { fontSize: 36 },
   guestTitle: { fontSize: 18, fontWeight: '600', color: APP_TEXT, marginBottom: 6 },
   guestSubtitle: { fontSize: 13, color: APP_GRAY, marginBottom: 20 },
   loginBtn: {
@@ -234,65 +443,172 @@ const styles = StyleSheet.create({
     backgroundColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center',
   },
   loginBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  // 用戶卡片
-  userCard: {
-    flexDirection: 'row',
+
+  // Hero
+  hero: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+  },
+  heroActionBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 16,
-    marginBottom: 8,
+    zIndex: 1,
   },
-  avatarWrap: { marginRight: 12 },
-  avatar: { width: 60, height: 60, borderRadius: 30 },
+  heroUserRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingRight: 44 },
+  avatarWrap: { position: 'relative', flexShrink: 0 },
+  avatar: {
+    width: 68, height: 68, borderRadius: 34,
+    borderWidth: 3, borderColor: '#fff',
+  },
   avatarDefault: {
-    width: 60, height: 60, borderRadius: 30,
-    backgroundColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center',
+    width: 68, height: 68, borderRadius: 34,
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 3, borderColor: '#fff',
   },
-  avatarDefaultText: { fontSize: 24, fontWeight: '700', color: '#fff' },
-  userInfo: { flex: 1 },
-  userName: { fontSize: 17, fontWeight: '700', color: APP_TEXT, marginBottom: 4 },
-  userPhone: { fontSize: 13, color: APP_GRAY },
-  editBtn: {
-    paddingHorizontal: 14, paddingVertical: 6,
-    borderRadius: 14, borderWidth: 1, borderColor: APP_BORDER,
+  avatarDefaultText: { fontSize: 26, fontWeight: '700', color: '#fff' },
+  roleIconBadge: {
+    position: 'absolute',
+    bottom: -1,
+    right: -1,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
-  editBtnText: { fontSize: 13, color: APP_TEXT },
+  heroUserInfo: { flex: 1, minWidth: 0 },
+  heroName: { fontSize: 20, fontWeight: '700', color: APP_TEXT, letterSpacing: -0.5 },
+  heroMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  roleBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  roleBadgeText: { fontSize: 11, fontWeight: '600' },
+  heroPhone: { fontSize: 12, color: APP_GRAY },
+  dealerMemberText: { fontSize: 11, marginTop: 4 },
+
   // iPoint 卡片
   ipointCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#fff9f0',
-    marginHorizontal: 16,
-    marginBottom: 8,
+    backgroundColor: '#fff',
     borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#ffe0c0',
+    padding: 12,
+    marginTop: 14,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  ipointLabel: { fontSize: 12, color: APP_ORANGE, marginBottom: 4 },
-  ipointValue: { fontSize: 20, fontWeight: '700', color: APP_ORANGE },
-  ipointArrow: { fontSize: 22, color: APP_ORANGE },
-  // 菜單
-  menuSection: { backgroundColor: '#fff', marginBottom: 8 },
-  menuSectionTitle: {
-    fontSize: 12, color: APP_GRAY, fontWeight: '500',
-    paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4,
+  ipointIconBox: {
+    width: 34, height: 34, borderRadius: 10,
+    justifyContent: 'center', alignItems: 'center',
+    flexShrink: 0,
   },
-  menuItem: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderTopWidth: 0.5, borderTopColor: APP_BORDER,
+  ipointInfo: { flex: 1 },
+  ipointLabel: { fontSize: 11, color: APP_GRAY },
+  ipointValueRow: { flexDirection: 'row', alignItems: 'baseline' },
+  ipointValue: { fontSize: 22, fontWeight: '800', color: APP_ORANGE, letterSpacing: -1 },
+  ipointUnit: { fontSize: 12, color: APP_GRAY, fontWeight: '500' },
+  rechargeBtn: {
+    height: 32,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: APP_ORANGE,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  menuIcon: { fontSize: 18, marginRight: 12, width: 24, textAlign: 'center' },
-  menuLabel: { flex: 1, fontSize: 15, color: APP_TEXT },
-  menuLabelDanger: { color: '#ef4444' },
-  menuArrow: { fontSize: 18, color: '#c7c7cc' },
+  rechargeBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+
+  // 數據統計
+  statsCard: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 16,
+    paddingVertical: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  statItem: { flex: 1, alignItems: 'center' },
+  statItemBorder: {
+    borderLeftWidth: 0.5,
+    borderRightWidth: 0.5,
+    borderColor: 'rgba(0,0,0,0.08)',
+  },
+  statValue: { fontSize: 22, fontWeight: '700', color: APP_ORANGE, letterSpacing: -0.5 },
+  statLabelRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  statLabel: { fontSize: 11, color: APP_GRAY },
+
+  // 菜單分組
+  menuGroup: { paddingHorizontal: 16, marginTop: 16 },
+  menuGroupTitle: {
+    fontSize: 12, fontWeight: '600', color: APP_GRAY,
+    textTransform: 'uppercase', letterSpacing: 0.5,
+    paddingHorizontal: 2, paddingBottom: 8,
+  },
+  menuGroupCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+
+  // 菜單行
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  menuRowBorder: {
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  iconBox: {
+    width: 30, height: 30, borderRadius: 8,
+    justifyContent: 'center', alignItems: 'center',
+    marginRight: 12, flexShrink: 0,
+  },
+  menuRowLabel: { flex: 1, fontSize: 14, fontWeight: '500', color: APP_TEXT },
+  comingSoonBadge: {
+    backgroundColor: '#f5f5f7',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginRight: 8,
+  },
+  comingSoonText: { fontSize: 10, color: APP_GRAY, fontWeight: '500' },
   badge: {
-    backgroundColor: '#ef4444', borderRadius: 10,
-    paddingHorizontal: 8, paddingVertical: 2, marginRight: 8,
+    backgroundColor: '#FF3B30',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginRight: 8,
+    minWidth: 18,
+    alignItems: 'center',
   },
   badgeText: { fontSize: 11, color: '#fff', fontWeight: '600' },
+
   // 登出
   logoutWrap: { paddingHorizontal: 16, paddingTop: 16 },
   logoutBtn: {
