@@ -96,7 +96,9 @@ export default function VehicleDetailScreen() {
   const sellerPhone = (post as any)?.contactPhone || seller?.phone || '';
   const sellerName = seller?.name || 'GoGoCar 認證賣家';
   const no = post?.id ? `GG-${post.id.toString().padStart(6, '0')}` : '';
-  const videoUrl = (post as any)?.videoUrl || null;
+  // 影片 URL 雙軌兼容：/uploads/... 或 /manus-storage/... 都需要補全
+  const rawVideoUrl = (post as any)?.videoUrl || null;
+  const videoUrl = rawVideoUrl ? (resolveImageUrl(rawVideoUrl) || rawVideoUrl) : null;
 
   const brandName = (post as any)?.brandName || '';
   const modelName = (post as any)?.modelName || '';
