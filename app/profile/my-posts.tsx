@@ -243,6 +243,14 @@ export default function MyPostsScreen() {
     ]);
   };
 
+  // 計算增值服務剩餘天數
+  const daysLeft = (expireAt: string | Date | null | undefined): number | null => {
+    if (!expireAt) return null;
+    const diff = new Date(expireAt).getTime() - Date.now();
+    if (diff <= 0) return null;
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  };
+
   const renderItem = ({ item }: { item: any }) => {
     const img = resolveImageUrl(item.coverUrl || item.coverImageUrl);
     const meta = STATUS_META[item.status] || { label: item.status, color: APP_GRAY, bg: '#f3f4f6' };
@@ -250,6 +258,8 @@ export default function MyPostsScreen() {
     const isArchived = item.status === 'archived';
     const isSold     = item.status === 'sold';
     const postTitle  = item.title || `${item.brandName || ''} ${item.modelName || ''}`.trim() || '此車源';
+    const pinnedDays   = daysLeft(item.pinnedExpireAt);
+    const featuredDays = daysLeft(item.featuredExpireAt);
 
     return (
       <View style={s.card}>
@@ -285,6 +295,21 @@ export default function MyPostsScreen() {
                 <Text style={s.metaText}> {item.favoriteCount || 0}</Text>
               </View>
             </View>
+            {/* 增值服務狀態標籤 */}
+            {(pinnedDays !== null || featuredDays !== null) && (
+              <View style={s.upgradeTagRow}>
+                {pinnedDays !== null && (
+                  <View style={s.upgradeTag}>
+                    <Text style={s.upgradeTagText}>📌 置頂中（剩 {pinnedDays} 天）</Text>
+                  </View>
+                )}
+                {featuredDays !== null && (
+                  <View style={[s.upgradeTag, s.upgradeTagFeatured]}>
+                    <Text style={[s.upgradeTagText, s.upgradeTagFeaturedText]}>⭐ 精選中（剩 {featuredDays} 天）</Text>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         </TouchableOpacity>
 
@@ -480,4 +505,10 @@ const s = StyleSheet.create({
   processingText: { fontSize: 14, color: APP_GRAY },
   modalCloseBtn: { marginTop: 8, paddingVertical: 14, borderRadius: 14, backgroundColor: '#f3f4f6', alignItems: 'center' },
   modalCloseBtnText: { fontSize: 15, fontWeight: '600', color: APP_TEXT },
+  // 增值服務標籤
+  upgradeTagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
+  upgradeTag: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF9C3', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  upgradeTagFeatured: { backgroundColor: '#FFF7ED' },
+  upgradeTagText: { fontSize: 10, fontWeight: '600', color: '#92400E' },
+  upgradeTagFeaturedText: { color: '#C2410C' },
 });
