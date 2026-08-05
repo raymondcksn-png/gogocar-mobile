@@ -126,7 +126,10 @@ export default function IPointScreen() {
     if (!receiptUri) { Alert.alert('提示', '請上傳轉帳截圖'); return; }
     setSubmitting(true);
     try {
-      let receiptUrl = `/receipt-${orderNo}.jpg`;
+      // 雙軌兼容上傳：必須上傳成功才能提交，不能靜默使用 fallback
+      // 後端返回相對路徑（/manus-storage/... 或 /uploads/...）
+      // 後台 WebApp 瀏覽器自動補全為絕對 URL，完全正確
+      let receiptUrl: string | null = null;
       try {
         const uploadResult = await FileSystem.uploadAsync(
           `${API_BASE_URL}/api/upload`,
@@ -135,16 +138,25 @@ export default function IPointScreen() {
         );
         if (uploadResult.status === 200) {
           const data = JSON.parse(uploadResult.body);
-          receiptUrl = data.url || receiptUrl;
+          receiptUrl = data.url || null;
+        } else {
+          console.warn('[Receipt Upload] Failed:', uploadResult.status, uploadResult.body);
         }
-      } catch {}
+      } catch (uploadErr: any) {
+        console.error('[Receipt Upload] Error:', uploadErr);
+      }
+      if (!receiptUrl) {
+        Alert.alert('上傳失敗', '圖片上傳失敗，請檢查網絡後重試。');
+        setSubmitting(false);
+        return;
+      }
       await uploadReceiptMut.mutateAsync({ orderNo, receiptUrl });
       refetchBalance();
       refetchTx();
       refetchOrders();
       setScreen('recharge-success');
     } catch (e: any) {
-      Alert.alert('錯誤', e.message || '提交失敗');
+      Alert.alert('錯誤', e.message || '提交失敗，請重試');
     }
     setSubmitting(false);
   };
