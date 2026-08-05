@@ -164,21 +164,22 @@ export default function SellScreen() {
     if (!result.canceled) {
       for (const asset of result.assets) {
         try {
-          const response = await fetch(asset.uri);
-          const blob = await response.blob();
-          const reader = new FileReader();
-          const base64 = await new Promise<string>((resolve, reject) => {
-            reader.onload = (e) => resolve((e.target?.result as string).split(',')[1]);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          });
-          const uploaded = await uploadMutation.mutateAsync({
-            fileName: `photo_${Date.now()}.jpg`, fileData: base64,
-            contentType: 'image/jpeg', category: 'photo',
-          });
-          setForm(prev => ({ ...prev, photoUrls: [...prev.photoUrls, { url: (uploaded as any).url }] }));
-        } catch {
-          Alert.alert('上傳失敗', '圖片上傳失敗，請重試');
+          // 全局標準：fetch + FormData（支持 iOS HEIC/HEIF/截圖等所有格式）
+          // 不使用 FileSystem.uploadAsync（iOS 截圖失敗）或 blob+FileReader+base64（React Native 不可靠）
+          const uriLower = (asset.uri || '').toLowerCase();
+          const mimeType = uriLower.includes('.png') ? 'image/png'
+            : uriLower.includes('.gif') ? 'image/gif'
+            : uriLower.includes('.webp') ? 'image/webp'
+            : 'image/jpeg';
+          const fd = new FormData();
+          fd.append('file', { uri: asset.uri, name: `photo_${Date.now()}.jpg`, type: mimeType } as any);
+          const resp = await fetch(`${API_BASE_URL}/api/upload`, { method: 'POST', body: fd });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const data = await resp.json();
+          if (!data.url) throw new Error('上傳返回空 URL');
+          setForm(prev => ({ ...prev, photoUrls: [...prev.photoUrls, { url: data.url }] }));
+        } catch (e: any) {
+          Alert.alert('上傳失敗', e.message || '圖片上傳失敗，請重試');
         }
       }
     }
