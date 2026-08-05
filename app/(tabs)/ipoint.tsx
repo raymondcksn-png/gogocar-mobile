@@ -181,13 +181,13 @@ export default function IPointScreen() {
               const progress = task.progress;
               const isCompleted = (() => {
                 if (!progress) return false;
-                if (task.taskType === 'one_time') return (progress.totalCompletions || 0) >= 1;
-                if (task.taskType === 'daily') {
-                  // Check if completed today
-                  if (!progress.lastCompletedAt) return false;
-                  const last = new Date(progress.lastCompletedAt);
-                  const today = new Date();
-                  return last.toDateString() === today.toDateString();
+                // 後端字段名是 type（非 taskType）
+                if (task.type === 'one_time') return (progress.totalCompletions || 0) >= 1;
+                if (task.type === 'daily' || task.type === 'streak') {
+                  // 後端用 lastStreakDate（YYYY-MM-DD 字串）
+                  if (!progress.lastStreakDate) return false;
+                  const today = new Date().toISOString().slice(0, 10);
+                  return progress.lastStreakDate === today;
                 }
                 return false;
               })();
@@ -200,9 +200,9 @@ export default function IPointScreen() {
                   <View style={styles.taskLeft}>
                     <View style={styles.taskTitleRow}>
                       <Text style={styles.taskName}>{task.name}</Text>
-                      <View style={[styles.taskTypeBadge, { backgroundColor: task.taskType === 'daily' ? '#FFF7ED' : task.taskType === 'streak' ? '#EFF6FF' : '#F0FDF4' }]}>
-                        <Text style={[styles.taskTypeBadgeText, { color: task.taskType === 'daily' ? APP_ORANGE : task.taskType === 'streak' ? '#1D4ED8' : '#15803D' }]}>
-                          {TASK_TYPE_LABEL[task.taskType] || task.taskType}
+                      <View style={[styles.taskTypeBadge, { backgroundColor: task.type === 'daily' ? '#FFF7ED' : task.type === 'streak' ? '#EFF6FF' : '#F0FDF4' }]}>
+                        <Text style={[styles.taskTypeBadgeText, { color: task.type === 'daily' ? APP_ORANGE : task.type === 'streak' ? '#1D4ED8' : '#15803D' }]}>
+                          {TASK_TYPE_LABEL[task.type] || task.type}
                         </Text>
                       </View>
                     </View>
@@ -214,8 +214,8 @@ export default function IPointScreen() {
                   </View>
                   <View style={styles.taskRight}>
                     <Text style={styles.taskReward}>+{task.reward} iP</Text>
-                    {task.bonusReward > 0 && streakTarget > 0 && (
-                      <Text style={styles.taskBonus}>達標額外+{task.bonusReward}</Text>
+                    {(task.streakReward || 0) > 0 && streakTarget > 0 && (
+                      <Text style={styles.taskBonus}>達標額外+{task.streakReward}</Text>
                     )}
                     <TouchableOpacity
                       style={[
@@ -223,7 +223,7 @@ export default function IPointScreen() {
                         isCompleted && styles.taskBtnDone,
                         task.trigger === 'login' && styles.taskBtnAuto,
                       ]}
-                      onPress={() => !isCompleted && handleTriggerTask(task.trigger, task.name)}
+                      onPress={() => !isCompleted && !triggerTaskMutation.isPending && handleTriggerTask(task.trigger, task.name)}
                       disabled={isCompleted || triggerTaskMutation.isPending}
                       activeOpacity={0.7}
                     >

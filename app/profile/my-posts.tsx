@@ -1,12 +1,13 @@
 /**
  * 我的車源頁 — 完整對齊 WebApp AppSell.tsx
  * 狀態 Tab：全部 / 在售 / 已售 / 已下架 / 草稿
- * 操作按鈕（內嵌卡片）：預覽 / 編輯 / 刷新 / 下架 / 重新上架 / 標記已售 / 刪除
+ * 操作按鈕（內嵌卡片）：預覽 / 編輯 / 刷新 / 下架 / 重新上架 / 標記已售 / 增值服務 / 刪除
+ * 增值服務 Modal：置頂車源 / 精選推廣 / 急售標籤 / 相片增強（iPoint 支付）
  */
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, Alert, RefreshControl, ScrollView,
+  ActivityIndicator, Alert, RefreshControl, ScrollView, Modal,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -34,6 +35,34 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string }> 
   expired:  { label: '已過期', color: '#9CA3AF', bg: '#F9FAFB' },
 };
 
+// 增值服務定義（publishPlan 對應後端 ipoint.publishVehicle）
+const UPGRADE_SERVICES = [
+  {
+    plan: 'pinned' as const,
+    icon: '📌',
+    title: '置頂車源',
+    desc: '車源固定在搜索結果頂部，大幅提升曝光',
+    badge: '置頂',
+    badgeColor: '#EAB308',
+    costKey: 'publish_pinned_price',
+    defaultCost: 200,
+    durationKey: 'pinned_duration_days',
+    defaultDays: 3,
+  },
+  {
+    plan: 'featured' as const,
+    icon: '⭐',
+    title: '精選推廣',
+    desc: '精選標記提升搜索排名，增加買家信任',
+    badge: '精選',
+    badgeColor: '#F97316',
+    costKey: 'publish_featured_price',
+    defaultCost: 150,
+    durationKey: 'featured_duration_days',
+    defaultDays: 7,
+  },
+];
+
 function ActionBtn({ label, icon, bg, color, onPress }: {
   label: string; icon: string; bg: string; color: string; onPress: () => void;
 }) {
@@ -45,14 +74,151 @@ function ActionBtn({ label, icon, bg, color, onPress }: {
   );
 }
 
+// 增值服務 Modal
+function UpgradeModal({
+  visible, postId, postTitle, settings, onClose, onSuccess,
+}: {
+  visible: boolean;
+  postId: number;
+  postTitle: string;
+  settings: Record<string, string>;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const { data: balanceData } = trpc.ipoint.getBalance.useQuery();
+  const balance = (balanceData as any)?.balance ?? 0;
+
+  const publishVehicleMut = trpc.ipoint.publishVehicle.useMutation({
+    onSuccess: (res: any) => {
+      if (res.success) {
+        Alert.alert('升級成功！', '增值服務已生效，車源曝光度將大幅提升。');
+        onSuccess();
+        onClose();
+      } else if (res.requiresPayment) {
+        Alert.alert('提示', '微信支付暫不支持此操作，請使用 iPoint 支付。');
+      }
+    },
+    onError: (e: any) => {
+      Alert.alert('升級失敗', e.message || '請稍後重試');
+    },
+  });
+
+  const handleUpgrade = (plan: 'pinned' | 'featured', title: string, cost: number) => {
+    if (balance < cost) {
+      Alert.alert(
+        'iPoint 不足',
+        `此服務需要 ${cost} iP，您目前餘額為 ${balance} iP。\n\n請先前往「我的 → iPoint」充值。`,
+        [{ text: '確定' }]
+      );
+      return;
+    }
+    Alert.alert(
+      `確認購買「${title}」`,
+      `將消耗 ${cost} iP（當前餘額：${balance} iP）\n\n確認後立即生效。`,
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '確認購買',
+          onPress: () => publishVehicleMut.mutate({ postId, publishPlan: plan, paymentMethod: 'ipoint' }),
+        },
+      ]
+    );
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity style={s.modalSheet} activeOpacity={1}>
+          {/* 拖動條 */}
+          <View style={s.modalHandle} />
+          <Text style={s.modalTitle}>增值服務</Text>
+          <Text style={s.modalSubtitle} numberOfLines={1}>{postTitle}</Text>
+
+          {/* iPoint 餘額提示 */}
+          <View style={s.balanceRow}>
+            <Text style={s.balanceLabel}>當前 iPoint 餘額</Text>
+            <Text style={s.balanceValue}>{balance} iP</Text>
+          </View>
+
+          {/* 服務列表 */}
+          {UPGRADE_SERVICES.map((svc) => {
+            const cost = parseInt(settings[svc.costKey] || String(svc.defaultCost));
+            const days = parseInt(settings[svc.durationKey] || String(svc.defaultDays));
+            const canAfford = balance >= cost;
+            return (
+              <TouchableOpacity
+                key={svc.plan}
+                style={[s.svcCard, !canAfford && s.svcCardDisabled]}
+                onPress={() => handleUpgrade(svc.plan, svc.title, cost)}
+                activeOpacity={0.75}
+                disabled={publishVehicleMut.isPending}
+              >
+                <Text style={s.svcIcon}>{svc.icon}</Text>
+                <View style={s.svcInfo}>
+                  <View style={s.svcTitleRow}>
+                    <Text style={s.svcTitle}>{svc.title}</Text>
+                    <View style={[s.svcBadge, { backgroundColor: svc.badgeColor + '20' }]}>
+                      <Text style={[s.svcBadgeText, { color: svc.badgeColor }]}>{svc.badge}</Text>
+                    </View>
+                  </View>
+                  <Text style={s.svcDesc}>{svc.desc}</Text>
+                  <Text style={s.svcDuration}>有效期 {days} 天</Text>
+                </View>
+                <View style={s.svcCostWrap}>
+                  <Text style={[s.svcCost, !canAfford && s.svcCostInsufficient]}>{cost} iP</Text>
+                  {!canAfford && <Text style={s.svcInsufficient}>餘額不足</Text>}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+
+          {/* 急售和相片增強（暫不支持獨立 API，引導到編輯頁） */}
+          <View style={s.svcCardGray}>
+            <Text style={s.svcIcon}>🔔</Text>
+            <View style={s.svcInfo}>
+              <Text style={s.svcTitle}>急售標籤</Text>
+              <Text style={s.svcDesc}>在編輯車源時添加「急售」標籤，免費使用</Text>
+            </View>
+            <Text style={s.svcFree}>免費</Text>
+          </View>
+
+          <View style={s.svcCardGray}>
+            <Text style={s.svcIcon}>📸</Text>
+            <View style={s.svcInfo}>
+              <Text style={s.svcTitle}>相片增強</Text>
+              <Text style={s.svcDesc}>在編輯車源時使用 AI 智能優化相片</Text>
+            </View>
+            <Text style={s.svcFree}>免費</Text>
+          </View>
+
+          {publishVehicleMut.isPending && (
+            <View style={s.processingRow}>
+              <ActivityIndicator color={APP_ORANGE} size="small" />
+              <Text style={s.processingText}>處理中...</Text>
+            </View>
+          )}
+
+          <TouchableOpacity style={s.modalCloseBtn} onPress={onClose} activeOpacity={0.7}>
+            <Text style={s.modalCloseBtnText}>關閉</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
 export default function MyPostsScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
+  const [upgradeModal, setUpgradeModal] = useState<{ postId: number; title: string } | null>(null);
 
   const { data, isLoading, refetch } = trpc.vehicle.myPosts.useQuery(
     activeTab === 'all' ? undefined : { status: activeTab }
   );
+  const { data: settingsData } = trpc.admin.getSettings.useQuery();
+  const settings = (settingsData || {}) as Record<string, string>;
+
   const updateStatusMut = trpc.vehicle.updateStatus.useMutation({
     onSuccess: () => refetch(),
     onError: (e: any) => Alert.alert('操作失敗', e.message),
@@ -83,6 +249,7 @@ export default function MyPostsScreen() {
     const isActive   = item.status === 'active';
     const isArchived = item.status === 'archived';
     const isSold     = item.status === 'sold';
+    const postTitle  = item.title || `${item.brandName || ''} ${item.modelName || ''}`.trim() || '此車源';
 
     return (
       <View style={s.card}>
@@ -156,6 +323,12 @@ export default function MyPostsScreen() {
                 '確認已售', () => updateStatusMut.mutate({ postId: item.id, status: 'sold' }))} />
           )}
 
+          {/* 增值服務入口（僅在售狀態顯示） */}
+          {isActive && (
+            <ActionBtn label="增值服務" icon="star-outline" bg="#FFFBEB" color="#D97706"
+              onPress={() => setUpgradeModal({ postId: item.id, title: postTitle })} />
+          )}
+
           <View style={{ flex: 1 }} />
           <ActionBtn label="刪除" icon="trash-outline" bg="#FEF2F2" color="#dc2626"
             onPress={() => confirm('確定刪除？', '此操作不可恢復，車源將被永久刪除。',
@@ -218,6 +391,18 @@ export default function MyPostsScreen() {
           }
         />
       )}
+
+      {/* 增值服務 Modal */}
+      {upgradeModal && (
+        <UpgradeModal
+          visible={!!upgradeModal}
+          postId={upgradeModal.postId}
+          postTitle={upgradeModal.title}
+          settings={settings}
+          onClose={() => setUpgradeModal(null)}
+          onSuccess={() => refetch()}
+        />
+      )}
     </View>
   );
 }
@@ -266,4 +451,33 @@ const s = StyleSheet.create({
   emptySubtitle: { fontSize: 13, color: APP_GRAY },
   emptyBtn: { marginTop: 12, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, backgroundColor: APP_ORANGE },
   emptyBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  // Modal styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 20, paddingBottom: 40 },
+  modalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: APP_TEXT, marginBottom: 4 },
+  modalSubtitle: { fontSize: 13, color: APP_GRAY, marginBottom: 16 },
+  balanceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFF7ED', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10, marginBottom: 16 },
+  balanceLabel: { fontSize: 13, color: '#92400E' },
+  balanceValue: { fontSize: 15, fontWeight: '700', color: APP_ORANGE },
+  svcCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#f9fafb', borderRadius: 14, padding: 14, marginBottom: 10 },
+  svcCardDisabled: { opacity: 0.6 },
+  svcCardGray: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#f3f4f6', borderRadius: 14, padding: 14, marginBottom: 10 },
+  svcIcon: { fontSize: 28, width: 36, textAlign: 'center' },
+  svcInfo: { flex: 1, gap: 2 },
+  svcTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  svcTitle: { fontSize: 15, fontWeight: '600', color: APP_TEXT },
+  svcBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  svcBadgeText: { fontSize: 10, fontWeight: '700' },
+  svcDesc: { fontSize: 12, color: APP_GRAY, lineHeight: 16 },
+  svcDuration: { fontSize: 11, color: '#9ca3af', marginTop: 2 },
+  svcCostWrap: { alignItems: 'flex-end', gap: 2 },
+  svcCost: { fontSize: 15, fontWeight: '700', color: APP_ORANGE },
+  svcCostInsufficient: { color: '#9ca3af' },
+  svcInsufficient: { fontSize: 10, color: '#ef4444' },
+  svcFree: { fontSize: 13, fontWeight: '600', color: '#16a34a' },
+  processingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12 },
+  processingText: { fontSize: 14, color: APP_GRAY },
+  modalCloseBtn: { marginTop: 8, paddingVertical: 14, borderRadius: 14, backgroundColor: '#f3f4f6', alignItems: 'center' },
+  modalCloseBtnText: { fontSize: 15, fontWeight: '600', color: APP_TEXT },
 });
