@@ -1,6 +1,13 @@
 /**
  * 個人資料編輯頁 — 對齊 WebApp AppProfile
  * 功能：修改暱稱 + 上傳頭像
+ *
+ * 雙軌兼容原則：
+ * - 上傳端點使用 API_BASE_URL（從 app.json extra.apiBaseUrl 讀取）
+ * - 頭像顯示使用 resolveImageUrl（自動補全 /manus-storage/ 或 /uploads/ 為完整 URL）
+ * - 存儲到後端時保存相對路徑（/manus-storage/... 或 /uploads/...）
+ * - 本地部署（STORAGE_MODE=local）時 /uploads/ 路徑由 Express 靜態服務提供
+ * - Manus 雲端部署時 /manus-storage/ 路徑由 storageProxy.ts 代理到 S3
  */
 import React, { useState } from 'react';
 import {
@@ -11,23 +18,18 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { trpc } from '../../lib/trpc';
+import { trpc, resolveImageUrl, API_BASE_URL } from '../../lib/trpc';
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../../constants/data';
-
-const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://gogocar853.manus.space';
 
 export default function EditProfileScreen() {
   const router = useRouter();
   const { data: user, refetch } = trpc.auth.me.useQuery();
+
   // 暱稱預設值：優先 nickname，否則空字串（讓用戶自行填寫，placeholder 顯示帳號名稱）
   const [nickname, setNickname] = useState((user as any)?.nickname || '');
-  // 頭像：確保使用完整 URL
-  const resolveUrl = (url: string) => {
-    if (!url) return '';
-    if (url.startsWith('http')) return url;
-    return `${API_BASE}${url}`;
-  };
-  const [avatar, setAvatar] = useState(resolveUrl((user as any)?.avatar || ''));
+
+  // 頭像：雙軌兼容 — resolveImageUrl 自動識別 /manus-storage/ 和 /uploads/ 並補全為完整 URL
+  const [avatar, setAvatar] = useState(resolveImageUrl((user as any)?.avatar || '') || '');
   const [uploading, setUploading] = useState(false);
 
   const updateMut = trpc.auth.updateProfile.useMutation({
@@ -40,28 +42,34 @@ export default function EditProfileScreen() {
     if (status !== 'granted') { Alert.alert('需要相冊權限'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true, aspect: [1, 1], quality: 0.8,
+      allowsEditing: true,
+      aspect: [1, 1],   // 強制 1:1 裁剪，頭像顯示為圓形
+      quality: 0.85,
     });
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
     setUploading(true);
     try {
       const formData = new FormData();
-      // 動態確定 MIME type（支持 HEIC/HEIF）
+      // 動態確定 MIME type（支持 HEIC/HEIF — iOS 常見格式）
       const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
       const mimeMap: Record<string, string> = {
         jpg: 'image/jpeg', jpeg: 'image/jpeg',
         png: 'image/png', webp: 'image/webp',
-        gif: 'image/gif', heic: 'image/jpeg', heif: 'image/jpeg',
+        gif: 'image/gif',
+        heic: 'image/jpeg', heif: 'image/jpeg',  // HEIC/HEIF 轉為 JPEG
       };
       const mimeType = mimeMap[ext] || 'image/jpeg';
       const fileName = `avatar.${ext === 'heic' || ext === 'heif' ? 'jpg' : ext}`;
       formData.append('file', { uri: asset.uri, type: mimeType, name: fileName } as any);
-      const res = await fetch(`${API_BASE}/api/upload`, { method: 'POST', body: formData });
+
+      // 使用 API_BASE_URL（從 app.json extra.apiBaseUrl 讀取，本地部署時自動切換）
+      const res = await fetch(`${API_BASE_URL}/api/upload`, { method: 'POST', body: formData });
       const data = await res.json();
       if (data.url) {
-        // 確保使用完整 URL 顯示
-        const fullUrl = data.url.startsWith('http') ? data.url : `${API_BASE}${data.url}`;
+        // 上傳成功：data.url 為相對路徑（/manus-storage/... 或 /uploads/...）
+        // 使用 resolveImageUrl 補全為完整 URL 用於顯示
+        const fullUrl = resolveImageUrl(data.url) || data.url;
         setAvatar(fullUrl);
       } else {
         Alert.alert('上傳失敗', data.error || '請重試');
@@ -74,8 +82,22 @@ export default function EditProfileScreen() {
   };
 
   const handleSave = () => {
-    // 儲存時將完整 URL 轉回相對路徑（後端存儲格式）
-    const avatarToSave = avatar ? avatar.replace(API_BASE, '') : undefined;
+    // 存儲到後端時保存相對路徑（去掉 API_BASE_URL 前綴）
+    // 後端統一存儲 /manus-storage/... 或 /uploads/... 格式
+    let avatarToSave: string | undefined;
+    if (avatar) {
+      if (avatar.startsWith('http')) {
+        // 完整 URL → 提取相對路徑部分
+        try {
+          const url = new URL(avatar);
+          avatarToSave = url.pathname; // 取 /manus-storage/... 或 /uploads/... 部分
+        } catch {
+          avatarToSave = avatar;
+        }
+      } else {
+        avatarToSave = avatar;
+      }
+    }
     updateMut.mutate({ nickname: nickname.trim() || undefined, avatar: avatarToSave });
   };
 
@@ -121,7 +143,7 @@ export default function EditProfileScreen() {
               )}
             </View>
           </TouchableOpacity>
-          <Text style={styles.avatarHint}>點擊更換頭像（自動裁剪為圓形）</Text>
+          <Text style={styles.avatarHint}>點擊更換頭像（自動裁剪為 1:1 圓形）</Text>
         </View>
 
         {/* 暱稱 */}
@@ -173,7 +195,10 @@ const styles = StyleSheet.create({
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '600', color: APP_TEXT },
   saveBtn: { width: 56, height: 40, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 8 },
   saveBtnText: { fontSize: 15, fontWeight: '600', color: APP_ORANGE },
-  avatarSection: { alignItems: 'center', paddingVertical: 32, backgroundColor: '#fff', marginTop: 16, borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: APP_BORDER },
+  avatarSection: {
+    alignItems: 'center', paddingVertical: 32, backgroundColor: '#fff',
+    marginTop: 16, borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: APP_BORDER,
+  },
   avatarWrap: { position: 'relative' },
   avatar: { width: 88, height: 88, borderRadius: 44 },
   avatarFallback: { backgroundColor: `${APP_ORANGE}20`, justifyContent: 'center', alignItems: 'center' },
@@ -185,12 +210,18 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: '#fff',
   },
   avatarHint: { marginTop: 10, fontSize: 13, color: APP_GRAY },
-  section: { marginTop: 16, backgroundColor: '#fff', borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: APP_BORDER, paddingHorizontal: 16 },
+  section: {
+    marginTop: 16, backgroundColor: '#fff',
+    borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: APP_BORDER, paddingHorizontal: 16,
+  },
   sectionTitle: { fontSize: 12, color: APP_GRAY, paddingTop: 12, paddingBottom: 4, fontWeight: '500' },
   inputWrap: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderTopWidth: 0.5, borderTopColor: APP_BORDER },
   input: { flex: 1, fontSize: 15, color: APP_TEXT, padding: 0 },
   charCount: { fontSize: 12, color: APP_GRAY, marginLeft: 8 },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderTopWidth: 0.5, borderTopColor: APP_BORDER },
+  infoRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 14, borderTopWidth: 0.5, borderTopColor: APP_BORDER,
+  },
   infoLabel: { fontSize: 15, color: APP_TEXT },
   infoValue: { fontSize: 14, color: APP_GRAY },
 });

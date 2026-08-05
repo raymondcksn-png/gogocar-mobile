@@ -9,11 +9,9 @@ import {
   KeyboardAvoidingView, Platform, ActivityIndicator, Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { trpc } from '../../lib/trpc';
+import { trpc, resolveImageUrl } from '../../lib/trpc';
 import { useAuth } from '../../contexts/AuthContext';
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../../constants/data';
-
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://gogocar853.manus.space';
 
 function formatTime(ts: number | string | Date): string {
   const d = new Date(ts);
@@ -102,7 +100,7 @@ export default function ChatRoomScreen() {
           activeOpacity={0.8}
         >
           {post.coverImage ? (
-            <Image source={{ uri: post.coverImage.startsWith('http') ? post.coverImage : `${BASE_URL}${post.coverImage}` }} style={styles.postImg} />
+            <Image source={{ uri: resolveImageUrl(post.coverImage) || post.coverImage }} style={styles.postImg} />
           ) : (
             <View style={[styles.postImg, { backgroundColor: '#f3f4f6', justifyContent: 'center', alignItems: 'center' }]}>
               <Text style={{ fontSize: 20 }}>🚗</Text>

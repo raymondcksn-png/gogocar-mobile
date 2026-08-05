@@ -11,7 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { trpc } from '../../lib/trpc';
+import { trpc, resolveImageUrl } from '../../lib/trpc';
 import { useAuth } from '../../contexts/AuthContext';
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../../constants/data';
 
@@ -194,7 +194,7 @@ export default function ProfileScreen() {
   const role = ROLE_META[activeRole] ?? ROLE_META['personal'];
 
   const displayName = (me as any)?.name || (me as any)?.nickname || `用戶 ${(me as any)?.phone?.slice(-4) || ''}`;
-  const avatarUrl = (me as any)?.avatar || (me as any)?.avatarUrl;
+  const avatarUrl = resolveImageUrl((me as any)?.avatar || (me as any)?.avatarUrl);
   const phone = (me as any)?.phone ? `${(me as any).phone.slice(0, 3)}****${(me as any).phone.slice(-4)}` : '未綁定手機';
   const initial = displayName.charAt(0).toUpperCase();
   const ipointBalance = ipointData?.balance ?? (me as any)?.iPointBalance ?? 0;
@@ -235,7 +235,7 @@ export default function ProfileScreen() {
           <View style={styles.heroUserRow}>
             <View style={styles.avatarWrap}>
               {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+                <Image source={{ uri: avatarUrl || undefined }} style={styles.avatar} />
               ) : (
                 <LinearGradient
                   colors={[role.color, `${role.color}CC`]}

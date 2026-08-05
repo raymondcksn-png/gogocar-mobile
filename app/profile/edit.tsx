@@ -10,10 +10,9 @@ import {
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { trpc } from '../../lib/trpc';
+import { trpc, resolveImageUrl } from '../../lib/trpc';
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../../constants/data';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://gogocar853.manus.space';
 
 const ROLE_LABELS: Record<string, string> = {
   personal: '個人用戶',
@@ -104,13 +103,8 @@ export default function EditScreen() {
     ]);
   };
 
-  // 頭像完整 URL
-  const resolveUrl = (url: string) => {
-    if (!url) return '';
-    if (url.startsWith('http')) return url;
-    return `${API_BASE}${url}`;
-  };
-  const avatarUrl = resolveUrl((user as any)?.avatar || '');
+  // 頭像完整 URL（雙軌兼容：讀取 app.json extra.apiBaseUrl）
+  const avatarUrl = resolveImageUrl((user as any)?.avatar || '') || '';
   const initials = ((user as any)?.nickname || (user as any)?.name || '?').charAt(0).toUpperCase();
   const roleLabel = ROLE_LABELS[(user as any)?.roleType || 'personal'] || '個人用戶';
 

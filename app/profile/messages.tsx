@@ -11,7 +11,7 @@ import {
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { trpc } from '../../lib/trpc';
+import { trpc, resolveImageUrl } from '../../lib/trpc';
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../../constants/data';
 
 function formatTime(date: string | Date | null | undefined) {
@@ -96,7 +96,7 @@ export default function MessagesScreen() {
               {/* 頭像 */}
               <View style={styles.avatarWrap}>
                 {item.otherUser?.avatar ? (
-                  <Image source={{ uri: item.otherUser.avatar }} style={styles.avatar} contentFit="cover" />
+                  <Image source={{ uri: resolveImageUrl(item.otherUser.avatar) || undefined }} style={styles.avatar} contentFit="cover" />
                 ) : (
                   <View style={[styles.avatar, styles.avatarFallback]}>
                     <Text style={styles.avatarText}>
