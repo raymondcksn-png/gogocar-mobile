@@ -41,6 +41,7 @@ const METHOD_TYPE_LABEL: Record<string, string> = {
   mpay:          'MPay',
   qr_scan:       '二維碼收款',
   fps:           'FPS 轉數快',
+  'FPS轉數快':   'FPS 轉數快',
   other:         '其他',
 };
 
@@ -49,6 +50,7 @@ const METHOD_TYPE_ICON: Record<string, string> = {
   mpay:          '📱',
   qr_scan:       '📷',
   fps:           '⚡',
+  'FPS轉數快':   '⚡',
   other:         '💳',
 };
 
