@@ -1,244 +1,495 @@
 /**
- * iPoint 積分頁 — 積分餘額 + 任務中心 + 微信支付充值 + 消費記錄
- * Sprint D1: WeChat Pay H5 充值流程（WebView 方案，Expo Go 相容）
- * Sprint S5: 加入任務中心（對齊 WebApp）
- * API: trpc.ipoint.getBalance + trpc.ipoint.getActiveTasks + trpc.ipoint.getTransactions
+ * iPoint 積分頁 — 完整對齊 WebApp AppIpointBalance + AppIpointRecharge
+ * 功能：餘額卡片 / 待審核訂單 / 交易記錄篩選 / 充值（離線多步驟 + 微信即將開通）
+ * API: ipoint.getBalance / ipoint.myTransactions / payment.listMethods / payment.createOrder / payment.uploadReceipt
  */
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, Modal,
+  ActivityIndicator, Alert, TextInput, Image,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { WebView } from 'react-native-webview';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
-import Constants from 'expo-constants';
-import { trpc, API_BASE_URL } from '../../lib/trpc';
+import { trpc, API_BASE_URL, resolveImageUrl } from '../../lib/trpc';
 import { useAuth } from '../../contexts/AuthContext';
-
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../../constants/data';
 
-// 微信原生 APP 的 AppID（從 app.json extra.wechatAppId 讀取，後台可配置）
-const WECHAT_APP_ID = (Constants.expoConfig?.extra as any)?.wechatAppId || 'wx_placeholder';
-// 微信支付回調地址（後端 webhook）
-const WECHAT_NOTIFY_URL = `${API_BASE_URL}/api/wechat-pay/notify`;
+// ── 常量 ──────────────────────────────────────────────────────────────────
+const PRESET_AMOUNTS = [50, 100, 200, 500, 1000];
 
-const RECHARGE_PLANS = [
-  { label: '100 iP', ipoint: 100, mop: 10, badge: '' },
-  { label: '300 iP', ipoint: 300, mop: 28, badge: '最受歡迎' },
-  { label: '500 iP', ipoint: 500, mop: 45, badge: '' },
-  { label: '1000 iP', ipoint: 1000, mop: 88, badge: '超值' },
-];
+const TX_TYPE_TABS = [
+  { key: undefined, label: '全部' },
+  { key: 'recharge', label: '充值' },
+  { key: 'task_reward', label: '任務獎勵' },
+  { key: 'publish_fee', label: '發佈扣費' },
+  { key: 'refund', label: '退款' },
+  { key: 'admin_adjust', label: '調整' },
+] as const;
 
-const TASK_TYPE_LABEL: Record<string, string> = {
-  daily: '每日',
-  streak: '連續',
-  one_time: '一次性',
+const TX_TYPE_META: Record<string, { label: string; color: string; icon: string }> = {
+  recharge:     { label: '充值',       color: '#22C55E', icon: '↓' },
+  task_reward:  { label: '任務獎勵',   color: '#8B5CF6', icon: '🎁' },
+  publish_fee:  { label: '發佈扣費',   color: '#EF4444', icon: '↑' },
+  refund:       { label: '退款',       color: '#3B82F6', icon: '↩' },
+  admin_adjust: { label: '管理員調整', color: '#6B7280', icon: '⚙' },
 };
 
-const TRIGGER_LABEL: Record<string, string> = {
-  login: '每日登入',
-  post_vehicle: '發佈車源',
-  complete_profile: '完善資料',
-  share: '分享',
-  review: '評價',
+const METHOD_TYPE_LABEL: Record<string, string> = {
+  bank_transfer: '銀行轉帳',
+  mpay:          'MPay',
+  qr_scan:       '二維碼收款',
+  fps:           'FPS 轉數快',
+  other:         '其他',
 };
+
+const METHOD_TYPE_ICON: Record<string, string> = {
+  bank_transfer: '🏦',
+  mpay:          '📱',
+  qr_scan:       '📷',
+  fps:           '⚡',
+  other:         '💳',
+};
+
+// ── 主組件 ────────────────────────────────────────────────────────────────
+type Screen = 'main' | 'recharge-step1' | 'recharge-detail' | 'recharge-proof' | 'recharge-success';
 
 export default function IPointScreen() {
   const router = useRouter();
-  const { isLoggedIn, user } = useAuth();
-  const [selectedPlan, setSelectedPlan] = useState(1);
-  const [paying, setPaying] = useState(false);
-  const [payUrl, setPayUrl] = useState<string | null>(null);
-  const [showWebView, setShowWebView] = useState(false);
+  const { isLoggedIn } = useAuth();
 
-  const { data: balanceData, isLoading: balanceLoading, refetch: refetchBalance } = trpc.ipoint.getBalance.useQuery(
+  const [screen, setScreen] = useState<Screen>('main');
+  const [txFilterType, setTxFilterType] = useState<string | undefined>(undefined);
+
+  // 充值流程狀態
+  const [rechargeAmount, setRechargeAmount] = useState<number>(100);
+  const [customAmount, setCustomAmount] = useState('');
+  const [selectedMethod, setSelectedMethod] = useState<any>(null);
+  const [remark, setRemark] = useState('');
+  const [orderNo, setOrderNo] = useState('');
+  const [receiptUri, setReceiptUri] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const { data: balanceData, refetch: refetchBalance } = trpc.ipoint.getBalance.useQuery(
     undefined, { enabled: isLoggedIn }
   );
-  const { data: tasksData, isLoading: tasksLoading, refetch: refetchTasks } = trpc.ipoint.getActiveTasks.useQuery(
+  const { data: txData, refetch: refetchTx } = trpc.ipoint.myTransactions.useQuery(
+    txFilterType ? { type: txFilterType as any } : undefined,
+    { enabled: isLoggedIn }
+  );
+  const { data: pendingOrders, refetch: refetchOrders } = trpc.payment.myOrders.useQuery(
     undefined, { enabled: isLoggedIn }
   );
-  const { data: txData, isLoading: txLoading, refetch: refetchTx } = trpc.ipoint.getTransactions.useQuery(
-    { page: 1, pageSize: 20 }, { enabled: isLoggedIn }
-  );
-  const { data: rateData } = trpc.wechatPay.getExchangeRate.useQuery();
+  const { data: methods, isLoading: methodsLoading } = trpc.payment.listMethods.useQuery();
 
-  const triggerTaskMutation = trpc.ipoint.triggerTask.useMutation({
-    onSuccess: (data: any) => {
+  const createOrderMut = trpc.payment.createOrder.useMutation();
+  const uploadReceiptMut = trpc.payment.uploadReceipt.useMutation();
+
+  const finalAmount = customAmount ? Number(customAmount) : rechargeAmount;
+  const ipointAmount = Math.floor(finalAmount);
+
+  const handleOfflineNext = async () => {
+    if (!selectedMethod) { Alert.alert('提示', '請選擇支付方式'); return; }
+    if (!finalAmount || finalAmount < 1) { Alert.alert('提示', '請輸入有效金額'); return; }
+    setSubmitting(true);
+    try {
+      const result = await createOrderMut.mutateAsync({
+        methodId: selectedMethod.id,
+        amount: finalAmount,
+        remark: remark || undefined,
+      });
+      setOrderNo(result.orderNo);
+      setScreen('recharge-detail');
+    } catch (e: any) {
+      Alert.alert('錯誤', e.message || '創建訂單失敗');
+    }
+    setSubmitting(false);
+  };
+
+  const handlePickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') { Alert.alert('提示', '需要相冊權限才能上傳憑證'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+      allowsEditing: false,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setReceiptUri(result.assets[0].uri);
+    }
+  };
+
+  const handleSubmitProof = async () => {
+    if (!receiptUri) { Alert.alert('提示', '請上傳轉帳截圖'); return; }
+    setSubmitting(true);
+    try {
+      let receiptUrl = `/receipt-${orderNo}.jpg`;
+      try {
+        const uploadResult = await FileSystem.uploadAsync(
+          `${API_BASE_URL}/api/upload`,
+          receiptUri,
+          { httpMethod: 'POST', uploadType: FileSystem.FileSystemUploadType.MULTIPART, fieldName: 'file' }
+        );
+        if (uploadResult.status === 200) {
+          const data = JSON.parse(uploadResult.body);
+          receiptUrl = data.url || receiptUrl;
+        }
+      } catch {}
+      await uploadReceiptMut.mutateAsync({ orderNo, receiptUrl });
       refetchBalance();
-      refetchTasks();
       refetchTx();
-      if (data?.rewards?.length > 0) {
-        const totalReward = data.rewards.reduce((sum: number, r: any) => sum + (r.reward || 0), 0);
-        Alert.alert('🎉 任務完成！', `獲得 +${totalReward} iPoint！`);
-      }
-    },
-    onError: (err: any) => {
-      Alert.alert('提示', err.message || '任務觸發失敗');
-    },
-  });
-
-  const createOrderMutation = trpc.wechatPay.createOrder.useMutation({
-    onSuccess: (data: any) => {
-      setPaying(false);
-      if (data?.h5Url) {
-        setPayUrl(data.h5Url);
-        setShowWebView(true);
-      } else {
-        Alert.alert('支付', '請在微信中完成支付');
-      }
-    },
-    onError: (err: any) => {
-      setPaying(false);
-      Alert.alert('支付失敗', err.message || '請稍後重試');
-    },
-  });
-
-  const handleRecharge = () => {
-    if (!isLoggedIn) {
-      Alert.alert('提示', '請先登入', [
-        { text: '去登入', onPress: () => router.push('/(auth)/login') },
-        { text: '取消', style: 'cancel' },
-      ]);
-      return;
+      refetchOrders();
+      setScreen('recharge-success');
+    } catch (e: any) {
+      Alert.alert('錯誤', e.message || '提交失敗');
     }
-    const plan = RECHARGE_PLANS[selectedPlan];
-    Alert.alert(
-      '確認充值',
-      `充值 ${plan.ipoint} iPoint\n費用：澳門幣 MOP ${plan.mop}`,
-      [
-        { text: '取消', style: 'cancel' },
-        {
-          text: '微信支付',
-          onPress: () => {
-            setPaying(true);
-            createOrderMutation.mutate({
-              mopAmount: plan.mop,
-              ipointAmount: plan.ipoint,
-              appId: WECHAT_APP_ID,
-              notifyUrl: WECHAT_NOTIFY_URL,
-            });
-          },
-        },
-      ]
-    );
+    setSubmitting(false);
   };
 
-  const handleWebViewClose = () => {
-    setShowWebView(false);
-    setPayUrl(null);
-    setTimeout(() => { refetchBalance(); refetchTx(); }, 1000);
-    Alert.alert('支付確認', '如已完成支付，iPoint 將在幾秒內到賬', [{ text: '確定' }]);
-  };
-
-  const handleTriggerTask = (trigger: string, taskName: string) => {
-    if (trigger === 'login') {
-      Alert.alert('提示', '登入任務由系統自動觸發，每日登入即可獲得積分');
-      return;
-    }
-    Alert.alert('領取任務獎勵', `完成「${taskName}」任務？`, [
-      { text: '取消', style: 'cancel' },
-      { text: '確認', onPress: () => triggerTaskMutation.mutate({ trigger }) },
-    ]);
-  };
+  const resetRecharge = useCallback(() => {
+    setScreen('main');
+    setRechargeAmount(100);
+    setCustomAmount('');
+    setSelectedMethod(null);
+    setRemark('');
+    setOrderNo('');
+    setReceiptUri(null);
+    setSubmitting(false);
+  }, []);
 
   if (!isLoggedIn) {
     return (
-      <View style={styles.guestWrap}>
-        <Text style={styles.guestIcon}>💎</Text>
-        <Text style={styles.guestTitle}>登入後查看 iPoint</Text>
-        <Text style={styles.guestSubtitle}>iPoint 可用於置頂車源、精選推廣等服務</Text>
-        <TouchableOpacity style={styles.loginBtn} onPress={() => router.push('/(auth)/login')}>
-          <Text style={styles.loginBtnText}>立即登入</Text>
+      <View style={s.guestWrap}>
+        <Text style={s.guestIcon}>💎</Text>
+        <Text style={s.guestTitle}>登入後查看 iPoint</Text>
+        <Text style={s.guestSub}>iPoint 可用於置頂車源、精選推廣等服務</Text>
+        <TouchableOpacity style={s.loginBtn} onPress={() => router.push('/(auth)/login')}>
+          <Text style={s.loginBtnText}>立即登入</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  const balance = balanceData?.balance ?? (user as any)?.iPointBalance ?? 0;
-  const tasks: any[] = tasksData || [];
+  // ── 充值成功 ──
+  if (screen === 'recharge-success') {
+    return (
+      <View style={s.container}>
+        <View style={s.header}><Text style={s.headerTitle}>充值 iPoint</Text></View>
+        <View style={s.successWrap}>
+          <View style={s.successIcon}><Text style={{ fontSize: 40 }}>✅</Text></View>
+          <Text style={s.successTitle}>憑證已提交</Text>
+          <Text style={s.successSub}>工作時間（09:00–18:00）內審核並充值</Text>
+          <View style={s.successCard}>
+            <SRow label="訂單號" value={orderNo} mono />
+            <SRow label="充值金額" value={`MOP ${finalAmount}`} orange />
+            <SRow label="iPoint" value={`${ipointAmount} iP`} />
+            <SRow label="狀態" value="等待審核" amber />
+          </View>
+          <TouchableOpacity style={s.primaryBtn} onPress={resetRecharge}>
+            <Text style={s.primaryBtnText}>返回 iPoint 頁面</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // ── 上傳憑證 ──
+  if (screen === 'recharge-proof') {
+    return (
+      <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => setScreen('recharge-detail')} style={s.backBtn}>
+            <Text style={s.backBtnText}>‹</Text>
+          </TouchableOpacity>
+          <Text style={s.headerTitle}>上傳憑證</Text>
+        </View>
+        <ScrollView contentContainerStyle={s.formContent}>
+          <Text style={s.formMeta}>訂單號：{orderNo}</Text>
+          <Text style={s.formMeta}>金額：MOP {finalAmount} → {ipointAmount} iPoint</Text>
+          <View style={{ height: 16 }} />
+          <Text style={s.fieldLabel}>上傳轉帳截圖</Text>
+          <TouchableOpacity style={s.uploadBox} onPress={handlePickImage} activeOpacity={0.7}>
+            {receiptUri ? (
+              <Image source={{ uri: receiptUri }} style={s.uploadPreview} resizeMode="contain" />
+            ) : (
+              <>
+                <Text style={s.uploadIcon}>📷</Text>
+                <Text style={s.uploadText}>點擊選擇圖片</Text>
+                <Text style={s.uploadHint}>支持 JPG/PNG，最大 10MB</Text>
+              </>
+            )}
+          </TouchableOpacity>
+          {receiptUri && (
+            <TouchableOpacity onPress={handlePickImage} style={s.rePickBtn}>
+              <Text style={s.rePickText}>重新選擇</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[s.primaryBtn, (!receiptUri || submitting) && s.primaryBtnDisabled]}
+            onPress={handleSubmitProof}
+            disabled={!receiptUri || submitting}
+            activeOpacity={0.8}
+          >
+            {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.primaryBtnText}>提交憑證</Text>}
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // ── 收款資料 ──
+  if (screen === 'recharge-detail' && selectedMethod) {
+    return (
+      <View style={s.container}>
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => setScreen('recharge-step1')} style={s.backBtn}>
+            <Text style={s.backBtnText}>‹</Text>
+          </TouchableOpacity>
+          <Text style={s.headerTitle}>收款資料</Text>
+        </View>
+        <ScrollView contentContainerStyle={s.formContent}>
+          <View style={s.methodDetailCard}>
+            <Text style={s.methodDetailIcon}>{METHOD_TYPE_ICON[selectedMethod.type] || '💳'}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.methodDetailName}>{selectedMethod.name}</Text>
+              <Text style={s.methodDetailType}>{METHOD_TYPE_LABEL[selectedMethod.type] || selectedMethod.type}</Text>
+              <Text style={s.methodDetailAmount}>MOP {finalAmount} → {ipointAmount} iPoint</Text>
+            </View>
+          </View>
+          <View style={s.detailCard}>
+            {selectedMethod.accountName && <DRow label="收款人" value={selectedMethod.accountName} />}
+            {selectedMethod.bankName && <DRow label="銀行" value={selectedMethod.bankName} />}
+            {selectedMethod.accountNumber && <DRow label="帳號" value={selectedMethod.accountNumber} />}
+            {selectedMethod.phoneNumber && <DRow label="手機號" value={selectedMethod.phoneNumber} />}
+            {selectedMethod.instructions && (
+              <View style={{ paddingTop: 10 }}>
+                <Text style={s.fieldLabel}>轉帳說明</Text>
+                <Text style={{ fontSize: 13, color: APP_TEXT, lineHeight: 20 }}>{selectedMethod.instructions}</Text>
+              </View>
+            )}
+          </View>
+          {selectedMethod.qrCodeUrl && (
+            <View style={s.qrWrap}>
+              <Text style={s.fieldLabel}>掃碼收款</Text>
+              <Image
+                source={{ uri: resolveImageUrl(selectedMethod.qrCodeUrl) || selectedMethod.qrCodeUrl }}
+                style={s.qrImage}
+                resizeMode="contain"
+              />
+            </View>
+          )}
+          <Text style={s.fieldLabel}>轉帳備註（選填）</Text>
+          <TextInput
+            style={s.remarkInput}
+            value={remark}
+            onChangeText={setRemark}
+            placeholder="如：GoGoCar 充值 MOP 100"
+            placeholderTextColor={APP_GRAY}
+          />
+          <View style={s.tipBox}>
+            <Text style={s.tipText}>💡 請按以上資料完成轉帳，然後點擊下一步上傳截圖憑證</Text>
+          </View>
+          <TouchableOpacity style={s.primaryBtn} onPress={() => setScreen('recharge-proof')} activeOpacity={0.8}>
+            <Text style={s.primaryBtnText}>已轉帳，上傳憑證</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  // ── 充值步驟 1 ──
+  if (screen === 'recharge-step1') {
+    return (
+      <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={s.header}>
+          <TouchableOpacity onPress={resetRecharge} style={s.backBtn}>
+            <Text style={s.backBtnText}>‹</Text>
+          </TouchableOpacity>
+          <Text style={s.headerTitle}>充值 iPoint</Text>
+        </View>
+        <ScrollView contentContainerStyle={s.formContent} keyboardShouldPersistTaps="handled">
+          <Text style={s.sectionLabel}>選擇充值金額</Text>
+          <View style={s.amountGrid}>
+            {PRESET_AMOUNTS.map((a) => {
+              const active = rechargeAmount === a && !customAmount;
+              return (
+                <TouchableOpacity
+                  key={a}
+                  style={[s.amountBtn, active && s.amountBtnActive]}
+                  onPress={() => { setRechargeAmount(a); setCustomAmount(''); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[s.amountBtnText, active && s.amountBtnTextActive]}>MOP {a}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <TextInput
+            style={s.customInput}
+            value={customAmount}
+            onChangeText={setCustomAmount}
+            placeholder="自定義金額 (MOP)"
+            placeholderTextColor={APP_GRAY}
+            keyboardType="numeric"
+          />
+          <View style={s.ipointRow}>
+            <Text style={s.ipointLabel}>對應 iPoint</Text>
+            <Text style={s.ipointValue}>{ipointAmount} iPoint</Text>
+          </View>
+
+          <Text style={[s.sectionLabel, { marginTop: 20 }]}>選擇支付方式</Text>
+          {methodsLoading ? (
+            <ActivityIndicator color={APP_ORANGE} style={{ paddingVertical: 16 }} />
+          ) : methods && (methods as any[]).length > 0 ? (
+            <View style={s.methodList}>
+              {(methods as any[]).map((m: any) => {
+                const isSelected = selectedMethod?.id === m.id;
+                return (
+                  <TouchableOpacity
+                    key={m.id}
+                    style={[s.methodItem, isSelected && s.methodItemActive]}
+                    onPress={() => setSelectedMethod(m)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={s.methodIcon}>{METHOD_TYPE_ICON[m.type] || '💳'}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.methodName, isSelected && s.methodNameActive]}>{m.name}</Text>
+                      <Text style={s.methodType}>{METHOD_TYPE_LABEL[m.type] || m.type}</Text>
+                    </View>
+                    {isSelected && <Text style={{ color: APP_ORANGE, fontSize: 18 }}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={s.noMethodBox}>
+              <Text style={s.noMethodText}>暫無可用支付方式，請聯繫客服</Text>
+            </View>
+          )}
+
+          <View style={s.methodItemDisabled}>
+            <Text style={s.methodIcon}>💚</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.methodNameDisabled}>微信支付</Text>
+              <Text style={s.methodType}>APP 支付（即將開通）</Text>
+            </View>
+            <View style={s.comingSoonBadge}><Text style={s.comingSoonText}>即將開通</Text></View>
+          </View>
+
+          <View style={s.methodItemDisabled}>
+            <Text style={s.methodIcon}>💙</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.methodNameDisabled}>支付寶</Text>
+              <Text style={s.methodType}>掃碼支付（即將開通）</Text>
+            </View>
+            <View style={s.comingSoonBadge}><Text style={s.comingSoonText}>即將開通</Text></View>
+          </View>
+
+          <View style={{ height: 16 }} />
+          <TouchableOpacity
+            style={[s.primaryBtn, (!selectedMethod || submitting) && s.primaryBtnDisabled]}
+            onPress={handleOfflineNext}
+            disabled={!selectedMethod || submitting}
+            activeOpacity={0.8}
+          >
+            {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.primaryBtnText}>下一步</Text>}
+          </TouchableOpacity>
+          <View style={{ height: 32 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // ── 主頁面 ──
+  const balance = balanceData?.balance ?? 0;
+  const totalEarned = balanceData?.totalEarned ?? 0;
+  const totalSpent = balanceData?.totalSpent ?? 0;
   const transactions = txData?.items || [];
-  const exchangeRate = (rateData as any)?.rate ?? 0.88;
+  const pendingList = (pendingOrders || []).filter((o: any) => o.status === 'pending');
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>iPoint</Text>
-      </View>
+    <View style={s.container}>
+      <View style={s.header}><Text style={s.headerTitle}>iPoint</Text></View>
       <ScrollView showsVerticalScrollIndicator={false}>
+
         {/* 餘額卡片 */}
-        <View style={styles.balanceCard}>
-          <Text style={styles.balanceLabel}>iPoint 餘額</Text>
-          {balanceLoading ? <ActivityIndicator color="#fff" size="small" /> : (
-            <Text style={styles.balanceValue}>{balance.toLocaleString()}</Text>
-          )}
-          <Text style={styles.balanceUnit}>積分</Text>
+        <View style={s.balanceCard}>
+          <Text style={s.balanceCardLabel}>當前餘額</Text>
+          <View style={s.balanceRow}>
+            <Text style={s.balanceValue}>{balance.toLocaleString()}</Text>
+            <Text style={s.balanceUnit}> iP</Text>
+          </View>
+          <Text style={s.balanceStat}>累計獲得 {totalEarned}　累計消費 {totalSpent}</Text>
+          <View style={s.balanceBtns}>
+            <TouchableOpacity style={s.balanceBtn} onPress={() => setScreen('recharge-step1')} activeOpacity={0.8}>
+              <Text style={s.balanceBtnText}>充值</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.balanceBtn} onPress={() => router.push('/profile/ipoint-tasks' as any)} activeOpacity={0.8}>
+              <Text style={s.balanceBtnText}>做任務</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* 任務中心 */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>✨ 任務中心</Text>
-            <Text style={styles.sectionHint}>完成任務免費獲取 iPoint</Text>
+        {/* 待審核充值訂單 */}
+        {pendingList.length > 0 && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>⏳ 待審核充值</Text>
+            {pendingList.map((order: any) => (
+              <View key={order.id} style={s.pendingItem}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.pendingDesc}>充值 {order.ipointAmount} iP</Text>
+                  <Text style={s.pendingOrderNo}>{order.orderNo}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={s.pendingAmount}>+{order.ipointAmount} iP</Text>
+                  <Text style={s.pendingStatus}>等待審核</Text>
+                </View>
+              </View>
+            ))}
           </View>
-          {tasksLoading ? (
-            <ActivityIndicator color={APP_ORANGE} style={{ paddingVertical: 20 }} />
-          ) : tasks.length === 0 ? (
-            <Text style={styles.empty}>暫無可用任務</Text>
-          ) : (
-            tasks.map((task: any) => {
-              const progress = task.progress;
-              const isCompleted = (() => {
-                if (!progress) return false;
-                // 後端字段名是 type（非 taskType）
-                if (task.type === 'one_time') return (progress.totalCompletions || 0) >= 1;
-                if (task.type === 'daily' || task.type === 'streak') {
-                  // 後端用 lastStreakDate（YYYY-MM-DD 字串）
-                  if (!progress.lastStreakDate) return false;
-                  const today = new Date().toISOString().slice(0, 10);
-                  return progress.lastStreakDate === today;
-                }
-                return false;
-              })();
+        )}
 
-              const streakDays = progress?.currentStreak || 0;
-              const streakTarget = task.streakDays || 0;
-
+        {/* 交易記錄 + 篩選 */}
+        <View style={s.section}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+            {TX_TYPE_TABS.map((tab) => {
+              const active = txFilterType === tab.key;
               return (
-                <View key={task.id} style={styles.taskItem}>
-                  <View style={styles.taskLeft}>
-                    <View style={styles.taskTitleRow}>
-                      <Text style={styles.taskName}>{task.name}</Text>
-                      <View style={[styles.taskTypeBadge, { backgroundColor: task.type === 'daily' ? '#FFF7ED' : task.type === 'streak' ? '#EFF6FF' : '#F0FDF4' }]}>
-                        <Text style={[styles.taskTypeBadgeText, { color: task.type === 'daily' ? APP_ORANGE : task.type === 'streak' ? '#1D4ED8' : '#15803D' }]}>
-                          {TASK_TYPE_LABEL[task.type] || task.type}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={styles.taskTrigger}>
-                      {TRIGGER_LABEL[task.trigger] || task.trigger}
-                      {streakTarget > 0 ? `  連續 ${streakDays}/${streakTarget} 天` : ''}
-                    </Text>
-                    {task.description ? <Text style={styles.taskDesc}>{task.description}</Text> : null}
+                <TouchableOpacity
+                  key={String(tab.key)}
+                  style={[s.tabChip, active && s.tabChipActive]}
+                  onPress={() => setTxFilterType(tab.key as any)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[s.tabChipText, active && s.tabChipTextActive]}>{tab.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {transactions.length === 0 ? (
+            <View style={s.emptyBox}><Text style={s.emptyText}>暫無交易記錄</Text></View>
+          ) : (
+            transactions.map((tx: any, i: number) => {
+              const meta = TX_TYPE_META[tx.type] || TX_TYPE_META.admin_adjust;
+              const isPositive = tx.amount > 0;
+              return (
+                <View key={tx.id || i} style={[s.txItem, i < transactions.length - 1 && s.txItemBorder]}>
+                  <View style={[s.txIconWrap, { backgroundColor: meta.color + '18' }]}>
+                    <Text style={{ fontSize: 16 }}>{meta.icon}</Text>
                   </View>
-                  <View style={styles.taskRight}>
-                    <Text style={styles.taskReward}>+{task.reward} iP</Text>
-                    {(task.streakReward || 0) > 0 && streakTarget > 0 && (
-                      <Text style={styles.taskBonus}>達標額外+{task.streakReward}</Text>
-                    )}
-                    <TouchableOpacity
-                      style={[
-                        styles.taskBtn,
-                        isCompleted && styles.taskBtnDone,
-                        task.trigger === 'login' && styles.taskBtnAuto,
-                      ]}
-                      onPress={() => !isCompleted && !triggerTaskMutation.isPending && handleTriggerTask(task.trigger, task.name)}
-                      disabled={isCompleted || triggerTaskMutation.isPending}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.taskBtnText, isCompleted && styles.taskBtnTextDone, task.trigger === 'login' && styles.taskBtnTextAuto]}>
-                        {isCompleted ? '已完成' : task.trigger === 'login' ? '自動' : '領取'}
-                      </Text>
-                    </TouchableOpacity>
+                  <View style={s.txLeft}>
+                    <Text style={s.txDesc} numberOfLines={1}>{tx.description || meta.label}</Text>
+                    <Text style={s.txDate}>
+                      {tx.createdAt ? new Date(tx.createdAt).toLocaleString('zh-HK', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[s.txAmount, isPositive ? s.txAmountIn : s.txAmountOut]}>
+                      {isPositive ? '+' : ''}{tx.amount} iP
+                    </Text>
+                    <Text style={s.txBalance}>餘額 {tx.balanceAfter}</Text>
                   </View>
                 </View>
               );
@@ -246,177 +497,128 @@ export default function IPointScreen() {
           )}
         </View>
 
-        {/* 充值套餐 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>充值 iPoint</Text>
-          <Text style={styles.sectionHint}>匯率：MOP 1 ≈ CNY {exchangeRate.toFixed(2)}（微信支付以人民幣結算）</Text>
-          <View style={styles.planGrid}>
-            {RECHARGE_PLANS.map((plan, i) => (
-              <TouchableOpacity
-                key={i}
-                style={[styles.planCard, selectedPlan === i && styles.planCardActive]}
-                onPress={() => setSelectedPlan(i)}
-                activeOpacity={0.7}
-              >
-                {!!plan.badge && (
-                  <View style={styles.planBadge}>
-                    <Text style={styles.planBadgeText}>{plan.badge}</Text>
-                  </View>
-                )}
-                <Text style={[styles.planIpoint, selectedPlan === i && styles.planIpointActive]}>{plan.label}</Text>
-                <Text style={[styles.planPrice, selectedPlan === i && styles.planPriceActive]}>MOP {plan.mop}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <TouchableOpacity
-            style={[styles.rechargeBtn, paying && styles.rechargeBtnDisabled]}
-            onPress={handleRecharge}
-            disabled={paying}
-            activeOpacity={0.8}
-          >
-            {paying ? <ActivityIndicator color="#fff" size="small" /> : (
-              <Text style={styles.rechargeBtnText}>微信支付充值 {RECHARGE_PLANS[selectedPlan].ipoint} iP</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* 服務說明 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>iPoint 用途</Text>
-          <View style={styles.serviceGrid}>
-            <ServiceItem icon="📌" title="置頂車源" desc="7天 / 100 iP" />
-            <ServiceItem icon="⭐" title="精選推廣" desc="7天 / 200 iP" />
-            <ServiceItem icon="🔔" title="急售標籤" desc="3天 / 50 iP" />
-            <ServiceItem icon="📸" title="相片增強" desc="每次 / 20 iP" />
-          </View>
-        </View>
-
-        {/* 交易記錄 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>交易記錄</Text>
-          {txLoading ? (
-            <ActivityIndicator color={APP_ORANGE} style={{ paddingVertical: 20 }} />
-          ) : transactions.length === 0 ? (
-            <Text style={styles.empty}>暫無交易記錄</Text>
-          ) : (
-            transactions.map((tx: any, i: number) => (
-              <View key={tx.id || i} style={[styles.txItem, i < transactions.length - 1 && styles.txItemBorder]}>
-                <View style={styles.txLeft}>
-                  <Text style={styles.txDesc}>{tx.description || tx.type || '交易'}</Text>
-                  <Text style={styles.txDate}>{tx.createdAt ? new Date(tx.createdAt).toLocaleDateString('zh-HK') : ''}</Text>
-                </View>
-                <Text style={[styles.txAmount, tx.amount > 0 ? styles.txAmountIn : styles.txAmountOut]}>
-                  {tx.amount > 0 ? '+' : ''}{tx.amount} iP
-                </Text>
-              </View>
-            ))
-          )}
-        </View>
         <View style={{ height: 40 }} />
       </ScrollView>
-
-      {/* 微信支付 WebView Modal */}
-      <Modal visible={showWebView} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleWebViewClose}>
-        <View style={styles.webviewContainer}>
-          <View style={styles.webviewHeader}>
-            <Text style={styles.webviewTitle}>微信支付</Text>
-            <TouchableOpacity onPress={handleWebViewClose} style={styles.webviewClose}>
-              <Text style={styles.webviewCloseText}>完成</Text>
-            </TouchableOpacity>
-          </View>
-          {payUrl && (
-            <WebView
-              source={{ uri: payUrl }}
-              style={{ flex: 1 }}
-              onNavigationStateChange={(state) => {
-                if (state.url?.startsWith('gogocar://') || state.url?.includes('pay_success')) {
-                  handleWebViewClose();
-                }
-              }}
-            />
-          )}
-        </View>
-      </Modal>
     </View>
   );
 }
 
-function ServiceItem({ icon, title, desc }: { icon: string; title: string; desc: string }) {
+// ── 輔助組件 ─────────────────────────────────────────────────────────────
+function SRow({ label, value, mono, orange, amber }: { label: string; value: string; mono?: boolean; orange?: boolean; amber?: boolean }) {
   return (
-    <View style={styles.serviceItem}>
-      <Text style={styles.serviceIcon}>{icon}</Text>
-      <Text style={styles.serviceTitle}>{title}</Text>
-      <Text style={styles.serviceDesc}>{desc}</Text>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 }}>
+      <Text style={{ fontSize: 13, color: APP_GRAY }}>{label}</Text>
+      <Text style={{ fontSize: 13, fontWeight: '600', color: orange ? APP_ORANGE : amber ? '#D97706' : APP_TEXT, fontFamily: mono ? 'monospace' : undefined }}>
+        {value}
+      </Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+function DRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 0.5, borderBottomColor: APP_BORDER }}>
+      <Text style={{ fontSize: 13, color: APP_GRAY, width: 72 }}>{label}</Text>
+      <Text style={{ fontSize: 14, fontWeight: '600', color: APP_TEXT, flex: 1, textAlign: 'right' }}>{value}</Text>
+    </View>
+  );
+}
+
+// ── 樣式 ─────────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: APP_BG },
-  header: { backgroundColor: '#fff', paddingTop: 56, paddingBottom: 12, paddingHorizontal: 16, borderBottomWidth: 0.5, borderBottomColor: APP_BORDER },
-  headerTitle: { fontSize: 22, fontWeight: '700', color: APP_TEXT, letterSpacing: -0.5 },
-  balanceCard: { margin: 16, borderRadius: 20, backgroundColor: APP_ORANGE, padding: 24, alignItems: 'center', shadowColor: APP_ORANGE, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
-  balanceLabel: { fontSize: 14, color: 'rgba(255,255,255,0.8)', marginBottom: 8 },
-  balanceValue: { fontSize: 48, fontWeight: '800', color: '#fff', letterSpacing: -2 },
-  balanceUnit: { fontSize: 14, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingTop: 56, paddingBottom: 12, paddingHorizontal: 16, backgroundColor: '#fff', borderBottomWidth: 0.5, borderBottomColor: APP_BORDER },
+  headerTitle: { flex: 1, fontSize: 18, fontWeight: '700', color: APP_TEXT, textAlign: 'center' },
+  backBtn: { position: 'absolute', left: 16, top: 52, padding: 8 },
+  backBtnText: { fontSize: 28, color: APP_TEXT, lineHeight: 32 },
+  balanceCard: { margin: 16, borderRadius: 16, padding: 20, backgroundColor: APP_ORANGE, shadowColor: APP_ORANGE, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+  balanceCardLabel: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginBottom: 4 },
+  balanceRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 4 },
+  balanceValue: { fontSize: 42, fontWeight: '800', color: '#fff', letterSpacing: -1 },
+  balanceUnit: { fontSize: 14, color: 'rgba(255,255,255,0.8)', marginBottom: 6 },
+  balanceStat: { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginBottom: 12 },
+  balanceBtns: { flexDirection: 'row', gap: 8 },
+  balanceBtn: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.25)' },
+  balanceBtnText: { fontSize: 13, fontWeight: '600', color: '#fff' },
   section: { backgroundColor: '#fff', marginTop: 8, paddingHorizontal: 16, paddingVertical: 16 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionTitle: { fontSize: 15, fontWeight: '600', color: APP_TEXT, marginBottom: 4 },
-  sectionHint: { fontSize: 11, color: APP_GRAY, marginBottom: 12 },
-  // Task styles
-  taskItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: APP_BORDER },
-  taskLeft: { flex: 1, marginRight: 12 },
-  taskTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  taskName: { fontSize: 14, fontWeight: '600', color: APP_TEXT },
-  taskTypeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  taskTypeBadgeText: { fontSize: 10, fontWeight: '600' },
-  taskTrigger: { fontSize: 12, color: APP_GRAY, marginBottom: 2 },
-  taskDesc: { fontSize: 11, color: APP_GRAY },
-  taskRight: { alignItems: 'center', minWidth: 60 },
-  taskReward: { fontSize: 15, fontWeight: '700', color: APP_ORANGE, marginBottom: 2 },
-  taskBonus: { fontSize: 10, color: '#16a34a', marginBottom: 6 },
-  taskBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: APP_ORANGE },
-  taskBtnDone: { backgroundColor: '#e5e7eb' },
-  taskBtnAuto: { backgroundColor: '#EFF6FF' },
-  taskBtnText: { fontSize: 12, fontWeight: '600', color: '#fff' },
-  taskBtnTextDone: { color: '#9ca3af' },
-  taskBtnTextAuto: { color: '#1D4ED8' },
-  // Plan styles
-  planGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
-  planCard: { width: '47%', borderRadius: 12, borderWidth: 1.5, borderColor: APP_BORDER, backgroundColor: APP_BG, padding: 14, alignItems: 'center', position: 'relative' },
-  planCardActive: { borderColor: APP_ORANGE, backgroundColor: `${APP_ORANGE}08` },
-  planBadge: { position: 'absolute', top: -8, right: 8, backgroundColor: APP_ORANGE, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
-  planBadgeText: { fontSize: 10, color: '#fff', fontWeight: '700' },
-  planIpoint: { fontSize: 18, fontWeight: '700', color: APP_TEXT, marginBottom: 4 },
-  planIpointActive: { color: APP_ORANGE },
-  planPrice: { fontSize: 13, color: APP_GRAY },
-  planPriceActive: { color: APP_ORANGE },
-  rechargeBtn: { height: 50, borderRadius: 14, backgroundColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center' },
-  rechargeBtnDisabled: { backgroundColor: '#ffb380' },
-  rechargeBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
-  serviceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  serviceItem: { width: '47%', backgroundColor: APP_BG, borderRadius: 12, padding: 16, alignItems: 'center' },
-  serviceIcon: { fontSize: 28, marginBottom: 8 },
-  serviceTitle: { fontSize: 14, fontWeight: '600', color: APP_TEXT, marginBottom: 4 },
-  serviceDesc: { fontSize: 12, color: APP_GRAY },
-  txItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
+  sectionTitle: { fontSize: 14, fontWeight: '700', color: APP_TEXT, marginBottom: 12 },
+  pendingItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: APP_BORDER },
+  pendingDesc: { fontSize: 14, fontWeight: '600', color: APP_TEXT },
+  pendingOrderNo: { fontSize: 11, color: APP_GRAY, marginTop: 2, fontFamily: 'monospace' },
+  pendingAmount: { fontSize: 14, fontWeight: '700', color: '#D97706' },
+  pendingStatus: { fontSize: 11, color: '#D97706', marginTop: 2 },
+  tabChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: APP_BORDER, marginRight: 8 },
+  tabChipActive: { backgroundColor: APP_ORANGE, borderColor: APP_ORANGE },
+  tabChipText: { fontSize: 12, fontWeight: '500', color: APP_GRAY },
+  tabChipTextActive: { color: '#fff' },
+  txItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 },
   txItemBorder: { borderBottomWidth: 0.5, borderBottomColor: APP_BORDER },
+  txIconWrap: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   txLeft: { flex: 1 },
-  txDesc: { fontSize: 14, color: APP_TEXT, fontWeight: '500' },
-  txDate: { fontSize: 12, color: APP_GRAY, marginTop: 2 },
-  txAmount: { fontSize: 16, fontWeight: '700' },
+  txDesc: { fontSize: 14, fontWeight: '500', color: APP_TEXT },
+  txDate: { fontSize: 11, color: APP_GRAY, marginTop: 2 },
+  txAmount: { fontSize: 14, fontWeight: '700' },
   txAmountIn: { color: '#16a34a' },
   txAmountOut: { color: '#ef4444' },
-  empty: { textAlign: 'center', paddingVertical: 24, color: APP_GRAY, fontSize: 14 },
+  txBalance: { fontSize: 10, color: APP_GRAY, marginTop: 2 },
+  emptyBox: { paddingVertical: 32, alignItems: 'center' },
+  emptyText: { fontSize: 14, color: APP_GRAY },
+  formContent: { padding: 16, paddingBottom: 40 },
+  sectionLabel: { fontSize: 14, fontWeight: '600', color: APP_TEXT, marginBottom: 10 },
+  amountGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
+  amountBtn: { width: '30%', paddingVertical: 12, borderRadius: 12, borderWidth: 1.5, borderColor: APP_BORDER, backgroundColor: '#fff', alignItems: 'center' },
+  amountBtnActive: { borderColor: APP_ORANGE, backgroundColor: APP_ORANGE + '10' },
+  amountBtnText: { fontSize: 14, fontWeight: '600', color: APP_TEXT },
+  amountBtnTextActive: { color: APP_ORANGE },
+  customInput: { borderWidth: 1, borderColor: APP_BORDER, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: APP_TEXT, backgroundColor: '#fff' },
+  ipointRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
+  ipointLabel: { fontSize: 12, color: APP_GRAY },
+  ipointValue: { fontSize: 13, fontWeight: '700', color: APP_ORANGE },
+  methodList: { gap: 8, marginBottom: 8 },
+  methodItem: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 12, borderWidth: 1.5, borderColor: APP_BORDER, backgroundColor: '#fff', gap: 12 },
+  methodItemActive: { borderColor: APP_ORANGE, backgroundColor: APP_ORANGE + '08' },
+  methodItemDisabled: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: APP_BORDER, backgroundColor: '#F9F9F9', opacity: 0.6, marginTop: 8, gap: 12 },
+  methodIcon: { fontSize: 22 },
+  methodName: { fontSize: 14, fontWeight: '600', color: APP_TEXT },
+  methodNameActive: { color: APP_ORANGE },
+  methodNameDisabled: { fontSize: 14, fontWeight: '600', color: APP_GRAY },
+  methodType: { fontSize: 12, color: APP_GRAY, marginTop: 2 },
+  comingSoonBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: '#F3F4F6' },
+  comingSoonText: { fontSize: 11, color: APP_GRAY },
+  noMethodBox: { padding: 20, alignItems: 'center', backgroundColor: '#F9F9F9', borderRadius: 12 },
+  noMethodText: { fontSize: 13, color: APP_GRAY },
+  methodDetailCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: APP_ORANGE + '10', borderRadius: 12, padding: 14, marginBottom: 16, gap: 12 },
+  methodDetailIcon: { fontSize: 28 },
+  methodDetailName: { fontSize: 15, fontWeight: '700', color: APP_TEXT },
+  methodDetailType: { fontSize: 12, color: APP_GRAY },
+  methodDetailAmount: { fontSize: 12, color: APP_ORANGE, marginTop: 2 },
+  detailCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: APP_BORDER, marginBottom: 16 },
+  qrWrap: { alignItems: 'center', marginBottom: 16 },
+  qrImage: { width: 180, height: 180, borderRadius: 12, borderWidth: 1, borderColor: APP_BORDER },
+  fieldLabel: { fontSize: 13, fontWeight: '600', color: APP_TEXT, marginBottom: 8 },
+  remarkInput: { borderWidth: 1, borderColor: APP_BORDER, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: APP_TEXT, backgroundColor: '#fff', marginBottom: 16 },
+  tipBox: { backgroundColor: '#FFFBEB', borderRadius: 10, padding: 12, marginBottom: 16 },
+  tipText: { fontSize: 12, color: '#92400E', lineHeight: 18 },
+  uploadBox: { borderWidth: 2, borderStyle: 'dashed', borderColor: APP_BORDER, borderRadius: 12, height: 160, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F9F9F9', marginBottom: 8 },
+  uploadIcon: { fontSize: 32, marginBottom: 8 },
+  uploadText: { fontSize: 14, color: APP_GRAY },
+  uploadHint: { fontSize: 11, color: APP_GRAY, marginTop: 4 },
+  uploadPreview: { width: '100%', height: '100%', borderRadius: 10 },
+  rePickBtn: { alignSelf: 'center', marginBottom: 16 },
+  rePickText: { fontSize: 13, color: APP_ORANGE },
+  formMeta: { fontSize: 13, color: APP_GRAY, marginBottom: 4 },
+  successWrap: { flex: 1, alignItems: 'center', paddingHorizontal: 24, paddingTop: 40 },
+  successIcon: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#D1FAE5', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  successTitle: { fontSize: 22, fontWeight: '700', color: APP_TEXT, marginBottom: 8 },
+  successSub: { fontSize: 13, color: APP_GRAY, marginBottom: 24, textAlign: 'center' },
+  successCard: { width: '100%', backgroundColor: '#F9F9F9', borderRadius: 12, padding: 16, marginBottom: 24 },
+  primaryBtn: { height: 50, borderRadius: 14, backgroundColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center', marginTop: 8 },
+  primaryBtnDisabled: { backgroundColor: '#ffb380' },
+  primaryBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
   guestWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: APP_BG, padding: 32 },
   guestIcon: { fontSize: 64, marginBottom: 16 },
   guestTitle: { fontSize: 20, fontWeight: '700', color: APP_TEXT, marginBottom: 8 },
-  guestSubtitle: { fontSize: 14, color: APP_GRAY, marginBottom: 32, textAlign: 'center' },
+  guestSub: { fontSize: 14, color: APP_GRAY, marginBottom: 32, textAlign: 'center' },
   loginBtn: { width: 200, height: 48, borderRadius: 24, backgroundColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center' },
   loginBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
-  webviewContainer: { flex: 1, backgroundColor: '#fff' },
-  webviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: APP_BORDER, backgroundColor: '#fff' },
-  webviewTitle: { fontSize: 17, fontWeight: '600', color: APP_TEXT },
-  webviewClose: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: `${APP_ORANGE}15` },
-  webviewCloseText: { fontSize: 15, fontWeight: '600', color: APP_ORANGE },
 });
