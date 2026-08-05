@@ -11,9 +11,16 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
-import { trpc } from '../../lib/trpc';
+import Constants from 'expo-constants';
+import { trpc, API_BASE_URL } from '../../lib/trpc';
 import { useAuth } from '../../contexts/AuthContext';
+
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../../constants/data';
+
+// 微信原生 APP 的 AppID（從 app.json extra.wechatAppId 讀取，後台可配置）
+const WECHAT_APP_ID = (Constants.expoConfig?.extra as any)?.wechatAppId || 'wx_placeholder';
+// 微信支付回調地址（後端 webhook）
+const WECHAT_NOTIFY_URL = `${API_BASE_URL}/api/wechat-pay/notify`;
 
 const RECHARGE_PLANS = [
   { label: '100 iP', ipoint: 100, mop: 10, badge: '' },
@@ -105,10 +112,11 @@ export default function IPointScreen() {
           onPress: () => {
             setPaying(true);
             createOrderMutation.mutate({
-              amount: plan.mop,
-              description: `GoGoCar 充值 ${plan.ipoint} iPoint`,
-              paymentType: 'ipoint_recharge',
-            } as any);
+              mopAmount: plan.mop,
+              ipointAmount: plan.ipoint,
+              appId: WECHAT_APP_ID,
+              notifyUrl: WECHAT_NOTIFY_URL,
+            });
           },
         },
       ]
