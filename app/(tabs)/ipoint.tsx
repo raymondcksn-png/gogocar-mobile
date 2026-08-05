@@ -3,14 +3,13 @@
  * 功能：餘額卡片 / 待審核訂單 / 交易記錄篩選 / 充值（離線多步驟 + 微信即將開通）
  * API: ipoint.getBalance / ipoint.myTransactions / payment.listMethods / payment.createOrder / payment.uploadReceipt
  */
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, TextInput, Image,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, AppState,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
 import { trpc, API_BASE_URL, resolveImageUrl } from '../../lib/trpc';
 import { useAuth } from '../../contexts/AuthContext';
@@ -73,17 +72,32 @@ export default function IPointScreen() {
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // 財務敗感查詢：staleTime:0 保證每次進入頁面都重新請求，不使用快取
   const { data: balanceData, refetch: refetchBalance } = trpc.ipoint.getBalance.useQuery(
-    undefined, { enabled: isLoggedIn }
+    undefined, { enabled: isLoggedIn, staleTime: 0, refetchOnMount: 'always' }
   );
   const { data: txData, refetch: refetchTx } = trpc.ipoint.myTransactions.useQuery(
     txFilterType ? { type: txFilterType as any } : undefined,
-    { enabled: isLoggedIn }
+    { enabled: isLoggedIn, staleTime: 0, refetchOnMount: 'always' }
   );
   const { data: pendingOrders, refetch: refetchOrders } = trpc.payment.myOrders.useQuery(
-    undefined, { enabled: isLoggedIn }
+    undefined, { enabled: isLoggedIn, staleTime: 0, refetchOnMount: 'always' }
   );
   const { data: methods, isLoading: methodsLoading } = trpc.payment.listMethods.useQuery();
+
+  // APP 從後台切回前台時自動刷新（大廠標準：財務數據必須即時更新）
+  const appStateRef = useRef(AppState.currentState);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (appStateRef.current.match(/inactive|background/) && nextState === 'active' && isLoggedIn) {
+        refetchBalance();
+        refetchTx();
+        refetchOrders();
+      }
+      appStateRef.current = nextState;
+    });
+    return () => sub.remove();
+  }, [isLoggedIn, refetchBalance, refetchTx, refetchOrders]);
 
   const createOrderMut = trpc.payment.createOrder.useMutation();
   const uploadReceiptMut = trpc.payment.uploadReceipt.useMutation();
