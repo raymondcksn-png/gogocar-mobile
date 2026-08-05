@@ -320,11 +320,11 @@ export default function ProfileScreen() {
         {/* ── 個人車主菜單 ── */}
         {activeRole === 'personal' && (
           <>
-            <MenuGroup title="我的交易">
+            <MenuGroup title="我的車源">
               <MenuRow iconName="car-outline" iconColors={[APP_ORANGE, '#EA580C']} label="我的車源" badge={postCount > 0 ? postCount : undefined} onPress={() => router.push('/profile/my-posts')} />
               <MenuRow iconName="heart-outline" iconColors={['#EF4444', '#DC2626']} label="我的收藏" onPress={() => router.push('/profile/favorites')} />
-              <MenuRow iconName="eye-outline" iconColors={['#8B5CF6', '#7C3AED']} label="瀏覽記錄" onPress={() => router.push('/profile/favorites')} />
-              <MenuRow iconName="document-text-outline" iconColors={['#06B6D4', '#0891B2']} label="我的訂單" onPress={() => {}} last />
+              <MenuRow iconName="eye-outline" iconColors={['#8B5CF6', '#7C3AED']} label="瀏覽記錄" comingSoon />
+              <MenuRow iconName="document-text-outline" iconColors={['#06B6D4', '#0891B2']} label="我的訂單" comingSoon last />
             </MenuGroup>
 
             <MenuGroup title="iPoint 錢包">
@@ -386,9 +386,6 @@ export default function ProfileScreen() {
         {/* ── 系統菜單（所有身份共用） ── */}
         <MenuGroup title="系統">
           <MenuRow iconName="chatbubble-outline" iconColors={['#3B82F6', '#2563EB']} label="消息" onPress={() => router.push('/profile/messages')} />
-          {activeRole !== 'school' && (
-            <MenuRow iconName="heart-outline" iconColors={['#EF4444', '#DC2626']} label="我的收藏" onPress={() => router.push('/profile/favorites')} />
-          )}
           <MenuRow iconName="settings-outline" iconColors={['#94A3B8', '#64748B']} label="設置" onPress={() => router.push('/profile/edit')} />
           <MenuRow iconName="swap-horizontal-outline" iconColors={['#6B7280', '#4B5563']} label="切換身份" onPress={() => Alert.alert('切換身份', '請前往個人資料頁面切換身份')} last />
         </MenuGroup>
