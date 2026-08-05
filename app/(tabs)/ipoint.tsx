@@ -126,24 +126,34 @@ export default function IPointScreen() {
     if (!receiptUri) { Alert.alert('提示', '請上傳轉帳截圖'); return; }
     setSubmitting(true);
     try {
-      // 雙軌兼容上傳：必須上傳成功才能提交，不能靜默使用 fallback
+      // 雙軌兼容上傳：使用 fetch + FormData（比 FileSystem.uploadAsync 更可靠，支持 iOS HEIC/HEIF 等所有格式）
       // 後端返回相對路徑（/manus-storage/... 或 /uploads/...）
       // 後台 WebApp 瀏覽器自動補全為絕對 URL，完全正確
       let receiptUrl: string | null = null;
       try {
-        const uploadResult = await FileSystem.uploadAsync(
-          `${API_BASE_URL}/api/upload`,
-          receiptUri,
-          { httpMethod: 'POST', uploadType: FileSystem.FileSystemUploadType.MULTIPART, fieldName: 'file' }
-        );
-        if (uploadResult.status === 200) {
-          const data = JSON.parse(uploadResult.body);
+        // 從 URI 推斷 MIME 類型（iOS 截圖常為 HEIC，統一發送為 JPEG）
+        const uriLower = receiptUri.toLowerCase();
+        const mimeType = uriLower.includes('.png') ? 'image/png'
+          : uriLower.includes('.gif') ? 'image/gif'
+          : uriLower.includes('.webp') ? 'image/webp'
+          : 'image/jpeg'; // 預設 JPEG（包括 HEIC/HEIF 統一發送為 JPEG）
+        const filename = `receipt_${Date.now()}.jpg`;
+        const formData = new FormData();
+        formData.append('file', { uri: receiptUri, name: filename, type: mimeType } as any);
+        const resp = await fetch(`${API_BASE_URL}/api/upload`, {
+          method: 'POST',
+          body: formData,
+          // 不要設 Content-Type，讓 fetch 自動設置 boundary
+        });
+        if (resp.ok) {
+          const data = await resp.json();
           receiptUrl = data.url || null;
         } else {
-          console.warn('[Receipt Upload] Failed:', uploadResult.status, uploadResult.body);
+          const errText = await resp.text().catch(() => '');
+          console.warn('[Receipt Upload] Server error:', resp.status, errText);
         }
       } catch (uploadErr: any) {
-        console.error('[Receipt Upload] Error:', uploadErr);
+        console.error('[Receipt Upload] Network error:', uploadErr);
       }
       if (!receiptUrl) {
         Alert.alert('上傳失敗', '圖片上傳失敗，請檢查網絡後重試。');
