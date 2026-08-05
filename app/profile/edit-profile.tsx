@@ -19,8 +19,15 @@ const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://gogocar853.manus.sp
 export default function EditProfileScreen() {
   const router = useRouter();
   const { data: user, refetch } = trpc.auth.me.useQuery();
-  const [nickname, setNickname] = useState((user as any)?.nickname || (user as any)?.name || '');
-  const [avatar, setAvatar] = useState((user as any)?.avatar || '');
+  // 暱稱預設值：優先 nickname，否則空字串（讓用戶自行填寫，placeholder 顯示帳號名稱）
+  const [nickname, setNickname] = useState((user as any)?.nickname || '');
+  // 頭像：確保使用完整 URL
+  const resolveUrl = (url: string) => {
+    if (!url) return '';
+    if (url.startsWith('http')) return url;
+    return `${API_BASE}${url}`;
+  };
+  const [avatar, setAvatar] = useState(resolveUrl((user as any)?.avatar || ''));
   const [uploading, setUploading] = useState(false);
 
   const updateMut = trpc.auth.updateProfile.useMutation({
@@ -40,11 +47,25 @@ export default function EditProfileScreen() {
     setUploading(true);
     try {
       const formData = new FormData();
-      formData.append('file', { uri: asset.uri, type: 'image/jpeg', name: 'avatar.jpg' } as any);
+      // 動態確定 MIME type（支持 HEIC/HEIF）
+      const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const mimeMap: Record<string, string> = {
+        jpg: 'image/jpeg', jpeg: 'image/jpeg',
+        png: 'image/png', webp: 'image/webp',
+        gif: 'image/gif', heic: 'image/jpeg', heif: 'image/jpeg',
+      };
+      const mimeType = mimeMap[ext] || 'image/jpeg';
+      const fileName = `avatar.${ext === 'heic' || ext === 'heif' ? 'jpg' : ext}`;
+      formData.append('file', { uri: asset.uri, type: mimeType, name: fileName } as any);
       const res = await fetch(`${API_BASE}/api/upload`, { method: 'POST', body: formData });
       const data = await res.json();
-      if (data.url) setAvatar(data.url);
-      else Alert.alert('上傳失敗', '請重試');
+      if (data.url) {
+        // 確保使用完整 URL 顯示
+        const fullUrl = data.url.startsWith('http') ? data.url : `${API_BASE}${data.url}`;
+        setAvatar(fullUrl);
+      } else {
+        Alert.alert('上傳失敗', data.error || '請重試');
+      }
     } catch {
       Alert.alert('上傳失敗', '網絡錯誤，請重試');
     } finally {
@@ -53,8 +74,9 @@ export default function EditProfileScreen() {
   };
 
   const handleSave = () => {
-    if (!nickname.trim()) { Alert.alert('請輸入暱稱'); return; }
-    updateMut.mutate({ nickname: nickname.trim(), avatar: avatar || undefined });
+    // 儲存時將完整 URL 轉回相對路徑（後端存儲格式）
+    const avatarToSave = avatar ? avatar.replace(API_BASE, '') : undefined;
+    updateMut.mutate({ nickname: nickname.trim() || undefined, avatar: avatarToSave });
   };
 
   const initials = ((user as any)?.nickname || (user as any)?.name || '?').charAt(0);
@@ -99,7 +121,7 @@ export default function EditProfileScreen() {
               )}
             </View>
           </TouchableOpacity>
-          <Text style={styles.avatarHint}>點擊更換頭像</Text>
+          <Text style={styles.avatarHint}>點擊更換頭像（自動裁剪為圓形）</Text>
         </View>
 
         {/* 暱稱 */}
@@ -110,7 +132,7 @@ export default function EditProfileScreen() {
               style={styles.input}
               value={nickname}
               onChangeText={setNickname}
-              placeholder="輸入暱稱"
+              placeholder={`預設：${(user as any)?.name || '未設置'}`}
               placeholderTextColor={APP_GRAY}
               maxLength={30}
               returnKeyType="done"
@@ -124,15 +146,15 @@ export default function EditProfileScreen() {
           <Text style={styles.sectionTitle}>帳號信息</Text>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>手機號碼</Text>
-            <Text style={styles.infoValue}>
-              {(user as any)?.phone
-                ? (user as any).phone.replace(/(\+\d{3})(\d+)(\d{4})/, '$1****$3')
-                : '未設置'}
-            </Text>
+            <Text style={styles.infoValue}>{(user as any)?.phone || '未設置'}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>用戶 ID</Text>
             <Text style={styles.infoValue}>#{(user as any)?.id}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>帳號名稱</Text>
+            <Text style={styles.infoValue}>{(user as any)?.name || '未設置'}</Text>
           </View>
         </View>
       </ScrollView>
