@@ -352,8 +352,8 @@ export default function ProfileScreen() {
             </MenuGroup>
 
             <MenuGroup title="會員中心">
-              <MenuRow iconName="ribbon-outline" iconColors={['#F59E0B', '#B45309']} label="年度付費會員" onPress={() => {}} />
-              <MenuRow iconName="trophy-outline" iconColors={['#D97706', '#92400E']} label="會員權益" onPress={() => {}} last />
+              <MenuRow iconName="ribbon-outline" iconColors={['#F59E0B', '#B45309']} label="車商會員中心" onPress={() => router.push('/profile/dealer-center')} />
+              <MenuRow iconName="trophy-outline" iconColors={['#D97706', '#92400E']} label="會員權益" onPress={() => router.push('/profile/dealer-center')} last />
             </MenuGroup>
 
             <MenuGroup title="iPoint 錢包">
@@ -367,19 +367,10 @@ export default function ProfileScreen() {
         {/* ── 駕校校長菜單 ── */}
         {activeRole === 'school' && (
           <>
-            <MenuGroup title="我的駕校">
-              <MenuRow iconName="business-outline" iconColors={['#16A34A', '#15803D']} label="駕校資料" onPress={() => router.push('/(tabs)/exam')} />
-              <MenuRow iconName="bar-chart-outline" iconColors={['#0EA5E9', '#0284C7']} label="今日概覽" onPress={() => {}} last />
-            </MenuGroup>
-
-            <MenuGroup title="業務管理">
-              <MenuRow iconName="book-outline" iconColors={['#3B82F6', '#2563EB']} label="課程管理" onPress={() => {}} />
-              <MenuRow iconName="school-outline" iconColors={['#8B5CF6', '#7C3AED']} label="學員訂單" onPress={() => {}} />
-              <MenuRow iconName="people-outline" iconColors={['#10B981', '#059669']} label="教練管理" onPress={() => {}} last />
-            </MenuGroup>
-
-            <MenuGroup title="收入">
-              <MenuRow iconName="trending-up-outline" iconColors={['#F59E0B', '#D97706']} label="收入統計" onPress={() => {}} last />
+            <MenuGroup title="駕校管理">
+              <MenuRow iconName="school-outline" iconColors={['#059669', '#047857']} label="駕校管理中心" onPress={() => router.push('/profile/school-center')} />
+              <MenuRow iconName="people-outline" iconColors={['#0EA5E9', '#0284C7']} label="報名管理" onPress={() => router.push('/profile/school-center')} />
+              <MenuRow iconName="pricetag-outline" iconColors={['#8B5CF6', '#7C3AED']} label="課程費用" onPress={() => router.push('/profile/school-center')} last />
             </MenuGroup>
           </>
         )}
