@@ -274,7 +274,7 @@ export default function ProfileScreen() {
             {/* 切換身份按鈕 */}
             <TouchableOpacity
               style={styles.heroActionBtn}
-              onPress={() => router.push('/profile/edit')}
+              onPress={() => router.push('/profile/role-switch')}
               activeOpacity={0.7}
             >
               <Ionicons name="swap-horizontal-outline" size={18} color="#6b7280" />
@@ -388,7 +388,7 @@ export default function ProfileScreen() {
         <MenuGroup title="系統">
           <MenuRow iconName="chatbubble-outline" iconColors={['#3B82F6', '#2563EB']} label="消息" onPress={() => router.push('/profile/messages')} />
           <MenuRow iconName="settings-outline" iconColors={['#94A3B8', '#64748B']} label="設置" onPress={() => router.push('/profile/edit')} />
-          <MenuRow iconName="swap-horizontal-outline" iconColors={['#6B7280', '#4B5563']} label="切換身份" onPress={() => Alert.alert('切換身份', '請前往個人資料頁面切換身份')} last />
+          <MenuRow iconName="swap-horizontal-outline" iconColors={['#6B7280', '#4B5563']} label="切換身份" onPress={() => router.push('/profile/role-switch')} last />
         </MenuGroup>
 
         {/* ── 登出 ── */}
