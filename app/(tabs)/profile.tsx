@@ -335,6 +335,7 @@ export default function ProfileScreen() {
 
             <MenuGroup title="iCar 服務">
               <MenuRow iconName="book-outline" iconColors={['#3B82F6', '#2563EB']} label="考車報名" onPress={() => router.push('/(tabs)/exam')} />
+              <MenuRow iconName="list-outline" iconColors={['#0EA5E9', '#0284C7']} label="我的考車報名" onPress={() => router.push('/driving/my-enrollments')} />
               <MenuRow iconName="construct-outline" iconColors={['#6366F1', '#4F46E5']} label="養車服務" comingSoon />
               <MenuRow iconName="shield-checkmark-outline" iconColors={['#14B8A6', '#0D9488']} label="驗車服務" comingSoon last />
             </MenuGroup>

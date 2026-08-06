@@ -34,7 +34,8 @@ export default function EnrollScreen() {
 
   // 報名表單
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | null>(null);
-  const [studentName, setStudentName] = useState((user as any)?.name || '');
+  const [studentName, setStudentName] = useState(''); // 留空讓用戶自填真實姓名
+  const [gender, setGender] = useState<'male' | 'female' | ''>('');
   const [birthDate, setBirthDate] = useState('');
   const [phone, setPhone] = useState((user as any)?.phone || '');
   const [submitting, setSubmitting] = useState(false);
@@ -70,7 +71,8 @@ export default function EnrollScreen() {
       return;
     }
     if (!selectedSchoolId) { Alert.alert('提示', '請選擇報名學校'); return; }
-    if (!studentName.trim()) { Alert.alert('提示', '請填寫姓名'); return; }
+    if (!studentName.trim()) { Alert.alert('提示', '請填寫真實姓名'); return; }
+    if (!gender) { Alert.alert('提示', '請選擇性別'); return; }
     if (!birthDate.trim()) { Alert.alert('提示', '請填寫出生日期'); return; }
     if (!phone.trim()) { Alert.alert('提示', '請填寫手機號碼'); return; }
 
@@ -82,6 +84,7 @@ export default function EnrollScreen() {
       studentName: studentName.trim(),
       studentBirthDate: birthDate.trim(),
       studentPhone: phone.trim(),
+      studentGender: gender,
     });
   };
 
@@ -107,8 +110,14 @@ export default function EnrollScreen() {
             <SRow label="報名號" value={`#${enrollmentId}`} />
             <SRow label="狀態" value="等待確認" orange />
           </View>
-          <TouchableOpacity style={s.primaryBtn} onPress={() => router.push('/(tabs)/exam' as any)}>
-            <Text style={s.primaryBtnText}>返回考車頁面</Text>
+          <TouchableOpacity style={s.primaryBtn} onPress={() => router.push('/driving/my-enrollments' as any)}>
+            <Text style={s.primaryBtnText}>查看我的報名記錄</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.primaryBtn, { marginTop: 10, backgroundColor: 'transparent', borderWidth: 1.5, borderColor: APP_ORANGE }]}
+            onPress={() => router.push('/(tabs)/exam' as any)}
+          >
+            <Text style={[s.primaryBtnText, { color: APP_ORANGE }]}>返回考車頁面</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -201,6 +210,25 @@ export default function EnrollScreen() {
                   placeholder="請輸入真實姓名"
                   placeholderTextColor={APP_GRAY}
                 />
+              </View>
+              <View style={[s.formRow, s.formRowBorder]}>
+                <Text style={s.formLabel}>性別</Text>
+                <View style={s.genderRow}>
+                  <TouchableOpacity
+                    style={[s.genderBtn, gender === 'male' && s.genderBtnActive]}
+                    onPress={() => setGender('male')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[s.genderBtnText, gender === 'male' && s.genderBtnTextActive]}>♂ 男</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.genderBtn, gender === 'female' && s.genderBtnActive]}
+                    onPress={() => setGender('female')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[s.genderBtnText, gender === 'female' && s.genderBtnTextActive]}>♀ 女</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
               <View style={[s.formRow, s.formRowBorder]}>
                 <Text style={s.formLabel}>出生日期</Text>
@@ -324,6 +352,13 @@ const s = StyleSheet.create({
   formRowBorder: { borderTopWidth: 1, borderTopColor: APP_BORDER },
   formLabel: { fontSize: 14, color: APP_TEXT, width: 72, fontWeight: '500' },
   formInput: { flex: 1, fontSize: 14, color: APP_TEXT, textAlign: 'right' },
+
+  // 性別選擇
+  genderRow: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
+  genderBtn: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5, borderColor: APP_BORDER },
+  genderBtnActive: { borderColor: APP_ORANGE, backgroundColor: '#FFF7ED' },
+  genderBtnText: { fontSize: 14, color: APP_GRAY, fontWeight: '500' },
+  genderBtnTextActive: { color: APP_ORANGE, fontWeight: '600' },
 
   // 費用說明
   tipBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginHorizontal: 16, marginTop: 12, backgroundColor: '#FFFBEB', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#FDE68A' },

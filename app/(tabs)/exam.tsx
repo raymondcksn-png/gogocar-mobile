@@ -88,7 +88,7 @@ export default function ExamScreen() {
 
             <View style={s.hintRow}>
               <Ionicons name="checkmark-circle-outline" size={14} color={APP_ORANGE} />
-              <Text style={s.hintText}>選擇您想考取的駕照類別</Text>
+              <Text style={s.hintText}>{hasLicense ? '選擇需要增領的駕照類別' : '選擇您想考取的駕照類別'}</Text>
             </View>
 
             {isLoading ? (
