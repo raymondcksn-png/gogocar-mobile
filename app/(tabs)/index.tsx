@@ -131,7 +131,7 @@ export default function HomeScreen() {
   const middleBannerTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── API 調用（對照 WebApp）──────────────────────────────────────────────────
-  const { data: latestPosts, isLoading, isFetching } = trpc.vehicle.listPosts.useQuery({
+  const { data: latestPosts, isLoading, isFetching, refetch: refetchPosts } = trpc.vehicle.listPosts.useQuery({
     vehicleType,
     page,
     pageSize: 10,
@@ -188,9 +188,13 @@ export default function HomeScreen() {
     setPage(1);
     setAllPosts([]);
     setHasMore(true);
-    // refetch 會在 page/vehicleType 變化後自動觸發
-    setTimeout(() => setRefreshing(false), 800);
-  }, []);
+    // 強制 refetch 繞過快取，等待真實請求完成後停止 loading
+    try {
+      await refetchPosts();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetchPosts]);
 
   // ── 累積 posts（對照 WebApp useEffect）────────────────────────────────────
   useEffect(() => {
