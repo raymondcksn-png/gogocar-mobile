@@ -15,6 +15,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { trpc, resolveImageUrl } from '../../../lib/trpc';
 import { API_BASE_URL } from '../../../lib/trpc';
+import { useQueryClient } from '@tanstack/react-query';
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../../../constants/data';
 
 const FUEL_TYPES = [
@@ -42,6 +43,7 @@ export default function EditPostScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const postId = Number(id);
+  const queryClient = useQueryClient();
 
   // 基本字段
   const [price, setPrice] = useState('');
@@ -95,6 +97,9 @@ export default function EditPostScreen() {
     onSuccess: (result: any) => {
       setIsSaving(false);
       if (result?.success) {
+        // 主動 invalidate 首頁車源列表，強制即時刷新
+        queryClient.invalidateQueries({ queryKey: [['vehicle', 'listPosts']] });
+        queryClient.invalidateQueries({ queryKey: [['vehicle', 'myPosts']] });
         Alert.alert('發佈成功 🎉', '車源已正式發佈，買家現在可以看到您的車源！', [
           { text: '查看車源', onPress: () => router.replace(`/vehicle/${postId}` as any) },
         ]);

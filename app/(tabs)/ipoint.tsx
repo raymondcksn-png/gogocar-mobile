@@ -8,6 +8,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, TextInput, Image,
   KeyboardAvoidingView, Platform, AppState,
+  RefreshControl,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
@@ -87,6 +88,13 @@ export default function IPointScreen() {
 
   // APP 從後台切回前台時自動刷新（大廠標準：財務數據必須即時更新）
   const appStateRef = useRef(AppState.currentState);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await Promise.all([refetchBalance(), refetchTx(), refetchOrders()]);
+    setIsRefreshing(false);
+  }, [refetchBalance, refetchTx, refetchOrders]);
+
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState) => {
       if (appStateRef.current.match(/inactive|background/) && nextState === 'active' && isLoggedIn) {
@@ -449,7 +457,17 @@ export default function IPointScreen() {
   return (
     <View style={s.container}>
       <View style={s.header}><Text style={s.headerTitle}>iPoint</Text></View>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#F97316"
+            colors={["#F97316"]}
+          />
+        }
+      >
 
         {/* 餘額卡片 */}
         <View style={s.balanceCard}>

@@ -5,9 +5,11 @@
  * API: trpc.driving.getCategoriesWithSubs
  */
 import React, { useState } from 'react';
+import { useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -32,11 +34,18 @@ export default function ExamScreen() {
   const [region, setRegion] = useState<'macau' | 'hongkong'>('macau');
   const [hasLicense, setHasLicense] = useState(false);
   const [expandedCatId, setExpandedCatId] = useState<number | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const { data: categories, isLoading } = trpc.driving.getCategoriesWithSubs.useQuery(
+  const { data: categories, isLoading, refetch } = trpc.driving.getCategoriesWithSubs.useQuery(
     undefined,
     { enabled: region === 'macau', staleTime: 5 * 60 * 1000 }
   );
+  const handleRefresh = useCallback(async () => {
+    if (region !== 'macau') return;
+    setIsRefreshing(true);
+    await refetch();
+    setIsRefreshing(false);
+  }, [region, refetch]);
 
   const toggleCat = (id: number) => setExpandedCatId(prev => prev === id ? null : id);
 
@@ -60,7 +69,18 @@ export default function ExamScreen() {
         ))}
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={s.scroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#F97316"
+            colors={["#F97316"]}
+          />
+        }
+      >
         {region === 'hongkong' ? (
           <View style={s.comingSoon}>
             <Text style={s.comingSoonIcon}>🇭🇰</Text>

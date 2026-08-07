@@ -4,9 +4,11 @@
  * 角色：personal（個人車主）/ dealer（車商）/ school（駕校校長）
  */
 import React, { useState } from 'react';
+import { useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, Alert, ActivityIndicator, Linking,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -134,6 +136,17 @@ export default function ProfileScreen() {
   );
   const { data: ipointData } = trpc.ipoint.getBalance.useQuery(undefined, { enabled: isLoggedIn });
 
+  const { refetch: refetchMe } = trpc.auth.me.useQuery(undefined, { enabled: isLoggedIn });
+  const { refetch: refetchPosts } = trpc.vehicle.myPosts.useQuery(undefined, { enabled: isLoggedIn });
+  const { refetch: refetchBalance } = trpc.ipoint.getBalance.useQuery(undefined, { enabled: isLoggedIn });
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const handleRefresh = useCallback(async () => {
+    if (!isLoggedIn) return;
+    setIsRefreshing(true);
+    await Promise.all([refetchMe(), refetchPosts(), refetchBalance()]);
+    setIsRefreshing(false);
+  }, [isLoggedIn, refetchMe, refetchPosts, refetchBalance]);
+
   const handleLogout = () => {
     Alert.alert('確認登出', '確定要登出嗎？', [
       { text: '取消', style: 'cancel' },
@@ -214,7 +227,17 @@ export default function ProfileScreen() {
         <Text style={styles.headerTitle}>我的</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#F97316"
+            colors={["#F97316"]}
+          />
+        }
+      >
         {/* ── Hero 區域 ── */}
         <LinearGradient
           colors={[heroGradientStart as any, '#ffffff']}

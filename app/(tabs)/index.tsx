@@ -6,6 +6,7 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, FlatList, ActivityIndicator, Dimensions, RefreshControl, Linking,
+  AppState,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -132,6 +133,26 @@ export default function HomeScreen() {
     pageSize: 10,
     region: region as any,
   });
+  // AppState 監聽：APP 從後台切回前台時刷新車源列表
+  // 節流保護：60 秒內最多觸發一次，防止頻繁切換 APP 造成過度請求
+  const appStateRef = useRef(AppState.currentState);
+  const lastRefreshRef = useRef<number>(0);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (appStateRef.current.match(/inactive|background/) && nextState === 'active') {
+        const now = Date.now();
+        if (now - lastRefreshRef.current > 60_000) {
+          lastRefreshRef.current = now;
+          // 重置到第一頁觸發刷新（與下拉刷新邏輯一致）
+          setPage(1);
+          setAllPosts([]);
+          setHasMore(true);
+        }
+      }
+      appStateRef.current = nextState;
+    });
+    return () => sub.remove();
+  }, []);
 
   const { data: banners } = trpc.siteContent.listBanners.useQuery();
   const { data: quickLinks } = trpc.siteContent.listQuickLinks.useQuery();
