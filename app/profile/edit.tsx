@@ -53,9 +53,41 @@ export default function EditScreen() {
     onSuccess: () => { refetch(); router.replace('/'); },
   });
 
+  // 通知設置（從後端讀取，真實保存）
+  const { data: notifSettings, refetch: refetchNotif } = trpc.auth.getNotificationSettings.useQuery(undefined, {
+    staleTime: 0,
+  });
+  const [notifyEnabled, setNotifyEnabled] = useState(true);
   const [notifyMsg, setNotifyMsg] = useState(true);
   const [notifyPrice, setNotifyPrice] = useState(true);
   const [notifySystem, setNotifySystem] = useState(true);
+  const updateNotifMut = trpc.auth.updateNotificationSettings.useMutation({
+    onSuccess: () => refetchNotif(),
+  });
+  // 從後端同步通知設置
+  useEffect(() => {
+    if (notifSettings) {
+      setNotifyEnabled(notifSettings.notificationEnabled);
+      setNotifyMsg(notifSettings.notifyMessage);
+      setNotifyPrice(notifSettings.notifyTransaction);
+      setNotifySystem(notifSettings.notifySystem);
+    }
+  }, [notifSettings]);
+  const handleNotifToggle = (key: 'enabled' | 'message' | 'transaction' | 'system', val: boolean) => {
+    if (key === 'enabled') {
+      setNotifyEnabled(val);
+      updateNotifMut.mutate({ notificationEnabled: val });
+    } else if (key === 'message') {
+      setNotifyMsg(val);
+      updateNotifMut.mutate({ notifyMessage: val });
+    } else if (key === 'transaction') {
+      setNotifyPrice(val);
+      updateNotifMut.mutate({ notifyTransaction: val });
+    } else if (key === 'system') {
+      setNotifySystem(val);
+      updateNotifMut.mutate({ notifySystem: val });
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert('確認登出', '確定要退出登入嗎？', [
@@ -171,17 +203,17 @@ export default function EditScreen() {
           <SettingRow
             icon="chatbubble" iconBg="#6366F1" label="消息通知"
             showArrow={false}
-            rightEl={<Switch value={notifyMsg} onValueChange={setNotifyMsg} trackColor={{ true: APP_ORANGE }} thumbColor="#fff" />}
+            rightEl={<Switch value={notifyMsg} onValueChange={(v) => handleNotifToggle('message', v)} trackColor={{ true: APP_ORANGE }} thumbColor="#fff" />}
           />
           <SettingRow
             icon="pricetag" iconBg="#EC4899" label="降價提醒"
             showArrow={false}
-            rightEl={<Switch value={notifyPrice} onValueChange={setNotifyPrice} trackColor={{ true: APP_ORANGE }} thumbColor="#fff" />}
+            rightEl={<Switch value={notifyPrice} onValueChange={(v) => handleNotifToggle('transaction', v)} trackColor={{ true: APP_ORANGE }} thumbColor="#fff" />}
           />
           <SettingRow
             icon="notifications" iconBg="#F59E0B" label="系統通知"
             showArrow={false}
-            rightEl={<Switch value={notifySystem} onValueChange={setNotifySystem} trackColor={{ true: APP_ORANGE }} thumbColor="#fff" />}
+            rightEl={<Switch value={notifySystem} onValueChange={(v) => handleNotifToggle('system', v)} trackColor={{ true: APP_ORANGE }} thumbColor="#fff" />}
           />
         </View>
 

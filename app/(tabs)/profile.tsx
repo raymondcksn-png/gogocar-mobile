@@ -346,7 +346,7 @@ export default function ProfileScreen() {
             <MenuGroup title="我的車源">
               <MenuRow iconName="car-outline" iconColors={[APP_ORANGE, '#EA580C']} label="我的車源" badge={postCount > 0 ? postCount : undefined} onPress={() => router.push('/profile/my-posts')} />
               <MenuRow iconName="heart-outline" iconColors={['#EF4444', '#DC2626']} label="我的收藏" onPress={() => router.push('/profile/favorites')} />
-              <MenuRow iconName="eye-outline" iconColors={['#8B5CF6', '#7C3AED']} label="瀏覽記錄" comingSoon />
+              <MenuRow iconName="eye-outline" iconColors={['#8B5CF6', '#7C3AED']} label="瀏覽記錄" onPress={() => router.push('/profile/view-history')} />
               <MenuRow iconName="document-text-outline" iconColors={['#06B6D4', '#0891B2']} label="我的訂單" comingSoon last />
             </MenuGroup>
 
