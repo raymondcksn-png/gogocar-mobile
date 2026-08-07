@@ -446,8 +446,8 @@ function PostItem({ post, tagColorMap }: { post: any; tagColorMap: Record<string
 }
 const pi = StyleSheet.create({
   wrap: { flexDirection: 'row', backgroundColor: '#fff', marginHorizontal: 12, marginTop: 10, borderRadius: 12, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
-  imgWrap: { width: 120, height: 90, position: 'relative' },
-  img: { width: 120, height: 90 },
+  imgWrap: { width: 120, minHeight: 90, position: 'relative', alignSelf: 'stretch' },
+  img: { width: 120, minHeight: 90, alignSelf: 'stretch' },
   imgEmpty: { backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center' },
   badge: { position: 'absolute', top: 6, left: 6, backgroundColor: '#ef4444', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 },
   badgeText: { color: '#fff', fontSize: 9, fontWeight: '700' },
