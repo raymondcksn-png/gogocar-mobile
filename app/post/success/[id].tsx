@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, Platform, Linking,
+  ActivityIndicator, Alert, Platform, Linking, Share, Clipboard,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -57,6 +57,33 @@ export default function PostSuccessScreen() {
   const PUBLISH_OPTIONS = getPublishOptions({});
   const selectedOption = PUBLISH_OPTIONS.find(o => o.plan === publishPlan)!;
   const ipointBalance = (balanceData as any)?.balance ?? 0;
+
+  const [copied, setCopied] = useState(false);
+
+  const shareUrl = `https://gogocar853.manus.space/vehicle/${postId}`;
+
+  const handleShare = async () => {
+    const postObj = postData as any;
+    const title = postObj ? `${postObj.brandName} ${(postObj.modelName || '').split(/[｜|]/)[0]?.trim() || ''}`.trim() : '二手車源';
+    const price = postObj?.price && Number(postObj.price) > 0 ? `HKD ${Number(postObj.price).toLocaleString()}` : '面議';
+    try {
+      await Share.share({
+        title: `GoGoCar — ${title}`,
+        message: `🚗 ${title}\n💰 ${price}\n\n在 GoGoCar 查看詳情：${shareUrl}`,
+        url: shareUrl,
+      });
+    } catch (e: any) {
+      if (e.message !== 'User did not share') {
+        Alert.alert('分享失敗', e.message || '請稍後重試');
+      }
+    }
+  };
+
+  const handleCopyLink = () => {
+    Clipboard.setString(shareUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const publishMutation = trpc.ipoint.publishVehicle.useMutation({
     onSuccess: () => {
@@ -123,49 +150,47 @@ export default function PostSuccessScreen() {
   if (isConfirmed) {
     return (
       <View style={s.confirmedWrap}>
-        <View style={s.confirmedIcon}>
-          <Ionicons name="checkmark-circle" size={64} color="#22C55E" />
-        </View>
-        <Text style={s.confirmedTitle}>發佈成功！</Text>
-        <Text style={s.confirmedSub}>您的車源已提交審核，通常在 1-2 工作日內完成</Text>
-        {/* 車源摘要 */}
-        {post && (
-          <View style={s.summaryCard}>
-            {coverUrl && <Image source={{ uri: coverUrl }} style={s.summaryImg} contentFit="cover" />}
-            <View style={s.summaryInfo}>
-              <Text style={s.summaryName} numberOfLines={2}>{post.brandName} {post.modelName}</Text>
-              {post.price && <Text style={s.summaryPrice}>HKD {Number(post.price).toLocaleString()}</Text>}
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center', paddingBottom: 40 }}>
+          <View style={s.confirmedIcon}>
+            <Ionicons name="checkmark-circle" size={64} color="#22C55E" />
+          </View>
+          <Text style={s.confirmedTitle}>發佈成功！🎉</Text>
+          <Text style={s.confirmedSub}>車源已正式上架，買家現在可以看到您的車源！</Text>
+          {/* 車源摘要 */}
+          {post && (
+            <View style={s.summaryCard}>
+              {coverUrl && <Image source={{ uri: coverUrl }} style={s.summaryImg} contentFit="cover" />}
+              <View style={s.summaryInfo}>
+                <Text style={s.summaryName} numberOfLines={2}>{post.brandName} {(post.modelName || '').split(/[｜|]/)[0]?.trim() || post.modelName}</Text>
+                {post.price && <Text style={s.summaryPrice}>HKD {Number(post.price).toLocaleString()}</Text>}
+              </View>
+            </View>
+          )}
+          {/* 分享區域 */}
+          <View style={s.shareCard}>
+            <Text style={s.shareTitle}>📣 分享給朋友，加速成交！</Text>
+            <Text style={s.shareDesc}>分享車源連結，讓更多買家看到您的車源</Text>
+            <View style={s.shareBtns}>
+              <TouchableOpacity style={s.shareBtn} onPress={handleShare} activeOpacity={0.8}>
+                <Ionicons name="share-social" size={20} color="#fff" />
+                <Text style={s.shareBtnText}>分享車源</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.shareBtn, s.copyBtn, copied && s.copyBtnDone]} onPress={handleCopyLink} activeOpacity={0.8}>
+                <Ionicons name={copied ? "checkmark" : "copy-outline"} size={20} color={copied ? "#22C55E" : APP_ORANGE} />
+                <Text style={[s.shareBtnText, { color: copied ? "#22C55E" : APP_ORANGE }]}>{copied ? '已複製！' : '複製連結'}</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        )}
-        {/* 狀態說明 */}
-        <View style={s.statusCard}>
-          {[
-            { icon: '草', bg: '#f5f5f7', color: '#6b7280', title: '草稿', desc: '已填寫但尚未支付發佈，只有您可見' },
-            { icon: '審', bg: '#FEF3C7', color: '#B45309', title: '審核中', desc: '支付待確認，通常在 1-2 工作日內完成' },
-            { icon: '售', bg: '#DCFCE7', color: '#15803D', title: '在售', desc: '已展示給所有買家，可收到詢問訊息' },
-            { icon: '售', bg: '#E5E7EB', color: '#4B5563', title: '已售', desc: '車輛已成功成交，車源自動下架' },
-          ].map((item, i) => (
-            <View key={i} style={[s.statusRow, i < 3 && { borderBottomWidth: 1, borderBottomColor: '#f5f5f5' }]}>
-              <View style={[s.statusDot, { backgroundColor: item.bg }]}>
-                <Text style={[s.statusDotText, { color: item.color }]}>{item.icon}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.statusTitle}>{item.title}</Text>
-                <Text style={s.statusDesc}>{item.desc}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-        <View style={s.confirmedBtns}>
-          <TouchableOpacity style={s.primaryBtn} onPress={() => router.push('/my-posts' as any)} activeOpacity={0.85}>
-            <Ionicons name="list" size={18} color="#fff" />
-            <Text style={s.primaryBtnText}>查看我的車源</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.secondaryBtn} onPress={() => router.push('/(tabs)/buy' as any)} activeOpacity={0.85}>
-            <Text style={s.secondaryBtnText}>返回首頁</Text>
-          </TouchableOpacity>
-        </View>
+          <View style={[s.confirmedBtns, { width: '100%' }]}>
+            <TouchableOpacity style={s.primaryBtn} onPress={() => router.push('/my-posts' as any)} activeOpacity={0.85}>
+              <Ionicons name="list" size={18} color="#fff" />
+              <Text style={s.primaryBtnText}>查看我的車源</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.secondaryBtn} onPress={() => router.push(`/vehicle/${postId}` as any)} activeOpacity={0.85}>
+              <Text style={s.secondaryBtnText}>查看車源詳情</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -322,7 +347,15 @@ const s = StyleSheet.create({
   confirmBtnDisabled: { opacity: 0.6 },
   confirmBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   // 確認成功頁
-  confirmedWrap: { flex: 1, backgroundColor: APP_BG, padding: 24, alignItems: 'center' },
+  confirmedWrap: { flex: 1, backgroundColor: APP_BG },
+  shareCard: { backgroundColor: '#fff', borderRadius: 16, width: '100%', padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  shareTitle: { fontSize: 15, fontWeight: '700', color: APP_TEXT, marginBottom: 4 },
+  shareDesc: { fontSize: 12, color: APP_GRAY, marginBottom: 12 },
+  shareBtns: { flexDirection: 'row', gap: 10 },
+  shareBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: APP_ORANGE, borderRadius: 12, paddingVertical: 12 },
+  shareBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  copyBtn: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: APP_ORANGE },
+  copyBtnDone: { borderColor: '#22C55E' },
   confirmedIcon: { marginTop: 40, marginBottom: 16 },
   confirmedTitle: { fontSize: 24, fontWeight: '800', color: APP_TEXT, marginBottom: 8 },
   confirmedSub: { fontSize: 14, color: APP_GRAY, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
