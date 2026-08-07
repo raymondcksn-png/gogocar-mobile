@@ -95,6 +95,11 @@ export default function VehicleDetailScreen() {
   const originalPrice = (post as any)?.originalPrice ? `新車含稅價 MOP ${Number((post as any).originalPrice).toLocaleString()}` : null;
   const sellerPhone = (post as any)?.contactPhone || seller?.phone || '';
   const sellerName = seller?.name || 'GoGoCar 認證賣家';
+  // 車商信息
+  const isDealer = (seller as any)?.activeRole === 'dealer' && (seller as any)?.dealerInfo?.dealerName;
+  const dealerName = (seller as any)?.dealerInfo?.dealerName || null;
+  const dealerAddress = (seller as any)?.dealerInfo?.dealerAddress || null;
+  const dealerPhone = (seller as any)?.dealerInfo?.dealerPhone || sellerPhone || null;
   const no = post?.id ? `GG-${post.id.toString().padStart(6, '0')}` : '';
   // 影片 URL 雙軌兼容：/uploads/... 或 /manus-storage/... 都需要補全
   const rawVideoUrl = (post as any)?.videoUrl || null;
@@ -470,14 +475,56 @@ export default function VehicleDetailScreen() {
         </ScrollView>
 
         {/* Layer 2: 賣家信息 */}
-        <View style={styles.sellerRow}>
-          <View style={styles.sellerAvatar}>
-            <Text style={{ fontSize: 18 }}>👤</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.sellerName}>{sellerName}</Text>
-            <Text style={styles.sellerLabel}>{seller?.role === 'dealer' ? '認證經銷商' : sellerName !== 'GoGoCar 認證賣家' ? '個人賣家' : 'GoGoCar 認證賣家'}</Text>
-          </View>
+        <View style={styles.sellerCard}>
+          {isDealer ? (
+            /* 車商展示 */
+            <View style={styles.dealerInfo}>
+              <View style={styles.dealerLogoWrap}>
+                {seller?.avatar ? (
+                  <Image source={{ uri: resolveImageUrl(seller.avatar) || seller.avatar }} style={styles.dealerLogo} contentFit="cover" />
+                ) : (
+                  <View style={styles.dealerLogoPlaceholder}>
+                    <Text style={{ fontSize: 20 }}>🏢</Text>
+                  </View>
+                )}
+              </View>
+              <View style={{ flex: 1, gap: 3 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.dealerName}>{dealerName}</Text>
+                  <View style={styles.dealerBadge}>
+                    <Text style={styles.dealerBadgeText}>認證車商</Text>
+                  </View>
+                </View>
+                {dealerAddress ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Ionicons name="location-outline" size={12} color="#8e8e93" />
+                    <Text style={styles.dealerAddr} numberOfLines={1}>{dealerAddress}</Text>
+                  </View>
+                ) : null}
+                {dealerPhone ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Ionicons name="call-outline" size={12} color="#8e8e93" />
+                    <Text style={styles.dealerAddr}>{dealerPhone}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          ) : (
+            /* 個人賣家展示 */
+            <View style={styles.sellerRow}>
+              <View style={styles.sellerAvatar}>
+                {seller?.avatar ? (
+                  <Image source={{ uri: resolveImageUrl(seller.avatar) || seller.avatar }} style={{ width: 40, height: 40, borderRadius: 20 }} contentFit="cover" />
+                ) : (
+                  <Text style={{ fontSize: 18 }}>👤</Text>
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sellerName}>{sellerName}</Text>
+                <Text style={styles.sellerLabel}>個人賣家</Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Layer 3: 操作按鈕 */}
@@ -672,10 +719,19 @@ const styles = StyleSheet.create({
   quickMsgChipActive: { borderColor: '#F57C00', borderWidth: 1.5, backgroundColor: '#FFF3E0' },
   quickMsgText: { fontSize: 13, color: '#3c3c43' },
   quickMsgTextActive: { color: '#E65100', fontWeight: '500' },
-  sellerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 10 },
+  sellerCard: { backgroundColor: '#fff', borderTopWidth: 0.5, borderTopColor: '#e5e5ea', paddingHorizontal: 16, paddingVertical: 12 },
+  sellerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   sellerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f2f2f7', justifyContent: 'center', alignItems: 'center' },
   sellerName: { fontSize: 15, fontWeight: '600', color: '#1c1c1e' },
   sellerLabel: { fontSize: 12, color: '#8e8e93' },
+  dealerInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  dealerLogoWrap: { width: 48, height: 48, borderRadius: 12, overflow: 'hidden', backgroundColor: '#f2f2f7' },
+  dealerLogo: { width: 48, height: 48, borderRadius: 12 },
+  dealerLogoPlaceholder: { width: 48, height: 48, borderRadius: 12, backgroundColor: '#FFF7ED', justifyContent: 'center', alignItems: 'center' },
+  dealerName: { fontSize: 15, fontWeight: '700', color: '#1c1c1e' },
+  dealerBadge: { backgroundColor: '#FFF7ED', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: '#FDBA74' },
+  dealerBadgeText: { fontSize: 10, fontWeight: '700', color: '#EA580C' },
+  dealerAddr: { fontSize: 12, color: '#8e8e93', flex: 1 },
   actionRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8 },
   chatBtn: { flex: 1, height: 48, borderRadius: 10, borderWidth: 1.5, borderColor: APP_ORANGE, justifyContent: 'center', alignItems: 'center', flexDirection: 'row' },
   chatBtnText: { fontSize: 15, color: APP_ORANGE, fontWeight: '600' },
