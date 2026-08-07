@@ -75,10 +75,10 @@ function VehicleListItem({ post, tagColorMap }: { post: any; tagColorMap?: Recor
         ) : null}
       </View>
       <View style={styles.vehicleInfo}>
-        <Text style={styles.vehicleTitle} numberOfLines={2}>
-          <Text style={{ fontWeight: '600' }}>{infoLine}</Text>
-          {post.subtitle ? <Text style={{ color: '#8e8e93', fontWeight: '400' }}> · {post.subtitle}</Text> : null}
-        </Text>
+        <Text style={styles.vehicleTitle} numberOfLines={1}>{infoLine}</Text>
+        {post.subtitle ? (
+          <Text style={[styles.vehicleMeta, { marginBottom: 2 }]} numberOfLines={1}>{post.subtitle}</Text>
+        ) : null}
         {detailParts.length > 0 && (
           <Text style={styles.vehicleMeta}>{detailParts.join(' · ')}</Text>
         )}
@@ -147,16 +147,16 @@ export default function HomeScreen() {
         const now = Date.now();
         if (now - lastRefreshRef.current > 60_000) {
           lastRefreshRef.current = now;
-          // 重置到第一頁觸發刷新（與下拉刷新邏輯一致）
+          // 不清空列表，直接 refetch 第一頁，避免競態導致列表閃空
           setPage(1);
-          setAllPosts([]);
           setHasMore(true);
+          refetchPosts();
         }
       }
       appStateRef.current = nextState;
     });
     return () => sub.remove();
-  }, []);
+  }, [refetchPosts]);
 
   const { data: banners } = trpc.siteContent.listBanners.useQuery();
   const { data: quickLinks } = trpc.siteContent.listQuickLinks.useQuery();

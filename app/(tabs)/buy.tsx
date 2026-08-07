@@ -415,10 +415,10 @@ function PostItem({ post, tagColorMap }: { post: any; tagColorMap: Record<string
         )}
       </View>
       <View style={pi.info}>
-        <Text style={pi.title} numberOfLines={2}>
-          <Text style={{ fontWeight: '600' }}>{title}</Text>
-          {post.subtitle ? <Text style={{ color: APP_GRAY, fontWeight: '400' }}> · {post.subtitle}</Text> : null}
-        </Text>
+        <Text style={pi.title} numberOfLines={1}>{title}</Text>
+        {post.subtitle ? (
+          <Text style={[pi.meta, { marginBottom: 2 }]} numberOfLines={1}>{post.subtitle}</Text>
+        ) : null}
         {meta ? <Text style={pi.meta}>{meta}</Text> : null}
         {(tags.length > 0 || fuelInfo || plateLabels.length > 0) && (
           <View style={pi.tagsRow}>
