@@ -6,7 +6,7 @@ import {
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { trpc } from '@/lib/trpc';
+import { trpc } from '../../lib/trpc';
 
 const APP_ORANGE = '#F97316';
 
