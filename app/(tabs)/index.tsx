@@ -654,7 +654,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5, borderBottomColor: '#e5e5ea', backgroundColor: '#fff',
   },
   vehicleImgWrap: { position: 'relative', flexShrink: 0 },
-  vehicleImg: { width: 100, minHeight: 76, borderRadius: 10, alignSelf: 'stretch' },
+  vehicleImgWrap: { position: 'relative', flexShrink: 0, width: 100, alignSelf: 'stretch' },
+  vehicleImg: { width: 100, flex: 1, minHeight: 76, borderRadius: 10 },
   vehicleImgPlaceholder: { backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center' },
   tagBadge: {
     position: 'absolute', top: 4, left: 4,
