@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { trpc, resolveImageUrl } from '../../../lib/trpc';
+import { API_BASE_URL } from '../../../lib/trpc';
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../../../constants/data';
 
 const FUEL_TYPES = [
@@ -89,6 +90,70 @@ export default function EditPostScreen() {
     },
   });
 
+  // 草稿一鍵發佈：先保存修改，再調用 ipoint.publishVehicle 扣 iPoint + 改 status 為 active
+  const publishMutation = trpc.ipoint.publishVehicle.useMutation({
+    onSuccess: (result: any) => {
+      setIsSaving(false);
+      if (result?.success) {
+        Alert.alert('發佈成功 🎉', '車源已正式發佈，買家現在可以看到您的車源！', [
+          { text: '查看車源', onPress: () => router.replace(`/vehicle/${postId}` as any) },
+        ]);
+      }
+    },
+    onError: (err: any) => {
+      setIsSaving(false);
+      Alert.alert('發佈失敗', err.message || '請稍後重試');
+    },
+  });
+
+  const getUpdatePayload = () => ({
+    postId,
+    price: Number(price),
+    mileage: mileage ? Number(mileage) : undefined,
+    transmission,
+    color: color || undefined,
+    contactPhone: contactPhone || undefined,
+    description: description || undefined,
+    tags: selectedTags,
+    plateNumber: plateNumber || undefined,
+    firstRegDate: firstRegDate || undefined,
+    transferCount: transferCount ? Number(transferCount) : undefined,
+    vin: vin || undefined,
+    originCountry: originCountry || undefined,
+    frontTire: frontTire || undefined,
+    rearTire: rearTire || undefined,
+    registrationRegion,
+    includedPlates: includedPlates.length > 0 ? (includedPlates as any) : undefined,
+    rightHandDrive,
+    photos: photos.map((p, idx) => ({ id: p.id, url: p.url, sortOrder: idx })),
+  });
+
+  const handlePublishDraft = () => {
+    if (!price || Number(price) <= 0) { Alert.alert('提示', '請先輸入有效售價'); return; }
+    Alert.alert(
+      '確認發佈',
+      '發佈後將扣除相應 iPoint，車源將正式上架供買家瀏覽。確認發佈？',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '確認發佈',
+          onPress: () => {
+            setIsSaving(true);
+            updateMutation.mutate(getUpdatePayload() as any, {
+              onSuccess: () => {
+                publishMutation.mutate({ postId, publishPlan: 'basic', paymentMethod: 'ipoint' });
+              },
+              onError: (err: any) => {
+                setIsSaving(false);
+                Alert.alert('保存失敗', err.message || '請稍後重試');
+              },
+            });
+          },
+        },
+      ]
+    );
+  };
+
   const { data: dbTags } = trpc.vehicle.getActiveTags.useQuery();
   const { data: dbColors } = trpc.vehicle.getActiveColors.useQuery();
 
@@ -135,18 +200,12 @@ export default function EditPostScreen() {
     if (!result.canceled) {
       for (const asset of result.assets) {
         try {
-          const response = await fetch(asset.uri);
-          const blob = await response.blob();
-          const reader = new FileReader();
-          const base64 = await new Promise<string>((resolve, reject) => {
-            reader.onload = (e) => resolve((e.target?.result as string).split(',')[1]);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          });
-          const uploaded = await uploadMutation.mutateAsync({
-            fileName: `photo_${Date.now()}.jpg`, fileData: base64,
-            contentType: 'image/jpeg', category: 'photo',
-          });
+          // 使用 fetch+FormData（全局標準，支持 iOS HEIC/HEIF）
+          const formData = new FormData();
+          formData.append('file', { uri: asset.uri, name: `photo_${Date.now()}.jpg`, type: 'image/jpeg' } as any);
+          const uploadResp = await fetch(`${API_BASE_URL}/api/upload`, { method: 'POST', body: formData });
+          if (!uploadResp.ok) throw new Error('上傳失敗');
+          const uploaded = await uploadResp.json();
           setPhotos(prev => [...prev, { url: (uploaded as any).url, sortOrder: prev.length, isNew: true }]);
         } catch {
           Alert.alert('上傳失敗', '圖片上傳失敗，請重試');
@@ -187,6 +246,7 @@ export default function EditPostScreen() {
       photos: photos.map((p, idx) => ({ id: p.id, url: p.url, sortOrder: idx })),
     } as any);
   };
+
 
   if (isLoading) {
     return (
@@ -434,10 +494,34 @@ export default function EditPostScreen() {
         </View>
 
         {/* 保存按鈕 */}
-        <TouchableOpacity style={[s.saveBtn, isSaving && s.saveBtnDisabled]} onPress={handleSave} disabled={isSaving} activeOpacity={0.85}>
-          {isSaving ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="checkmark-circle" size={20} color="#fff" />}
-          <Text style={s.saveBtnText}>{isSaving ? '保存中...' : '保存修改'}</Text>
-        </TouchableOpacity>
+        {/* 草稿狀態：顯示「保存草稿」和「立即發佈」兩個按鈕 */}
+        {post.status === 'draft' ? (
+          <View style={s.draftBtnRow}>
+            <TouchableOpacity
+              style={[s.saveDraftBtn, isSaving && s.saveBtnDisabled]}
+              onPress={handleSave}
+              disabled={isSaving}
+              activeOpacity={0.85}
+            >
+              {isSaving ? <ActivityIndicator color={APP_ORANGE} size="small" /> : <Ionicons name="save-outline" size={18} color={APP_ORANGE} />}
+              <Text style={s.saveDraftBtnText}>{isSaving ? '保存中...' : '保存草稿'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.publishBtn, isSaving && s.saveBtnDisabled]}
+              onPress={handlePublishDraft}
+              disabled={isSaving}
+              activeOpacity={0.85}
+            >
+              {isSaving ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="rocket-outline" size={18} color="#fff" />}
+              <Text style={s.publishBtnText}>{isSaving ? '發佈中...' : '立即發佈'}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity style={[s.saveBtn, isSaving && s.saveBtnDisabled]} onPress={handleSave} disabled={isSaving} activeOpacity={0.85}>
+            {isSaving ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="checkmark-circle" size={20} color="#fff" />}
+            <Text style={s.saveBtnText}>{isSaving ? '保存中...' : '保存修改'}</Text>
+          </TouchableOpacity>
+        )}
         <View style={{ height: 40 }} />
       </ScrollView>
     </KeyboardAvoidingView>
@@ -507,4 +591,9 @@ const s = StyleSheet.create({
   saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: APP_ORANGE, borderRadius: 16, marginHorizontal: 12, marginTop: 16, paddingVertical: 16 },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  draftBtnRow: { flexDirection: 'row', gap: 10, marginHorizontal: 12, marginTop: 16 },
+  saveDraftBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 2, borderColor: APP_ORANGE, borderRadius: 16, paddingVertical: 14, backgroundColor: '#fff' },
+  saveDraftBtnText: { color: APP_ORANGE, fontWeight: '700', fontSize: 15 },
+  publishBtn: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: APP_ORANGE, borderRadius: 16, paddingVertical: 14 },
+  publishBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });
