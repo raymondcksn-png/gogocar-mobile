@@ -15,6 +15,8 @@ import {
   Platform, StatusBar, RefreshControl, ActivityIndicator,
   Image, Alert,
 } from 'react-native';
+import { Modal } from 'react-native';
+import { Video, ResizeMode } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { trpc, API_BASE_URL } from '../../lib/trpc';
 import { useAuth } from '../../contexts/AuthContext';
@@ -92,6 +94,59 @@ function useZhuhaiStatus() {
   return { data, error };
 }
 
+// ── HLS 播放 Modal ────────────────────────────────────────────────────────────
+function HlsPlayerModal({ camera, onClose }: { camera: any; onClose: () => void }) {
+  const [status, setStatus] = useState<any>({});
+  return (
+    <Modal visible animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        {/* 關閉按鈕 */}
+        <TouchableOpacity
+          style={{ position: 'absolute', top: SAFE_TOP, right: 16, zIndex: 10, padding: 8 }}
+          onPress={onClose}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="close-circle" size={32} color="#fff" />
+        </TouchableOpacity>
+        {/* 視頻播放器 */}
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <Video
+            source={{ uri: camera.streamUrl }}
+            style={{ width: '100%', aspectRatio: 16 / 9 }}
+            useNativeControls
+            resizeMode={ResizeMode.CONTAIN}
+            shouldPlay
+            isLooping
+            onPlaybackStatusUpdate={s => setStatus(s)}
+          />
+          {/* 加載中提示 */}
+          {!status.isLoaded && !status.error && (
+            <View style={{ position: 'absolute', alignSelf: 'center' }}>
+              <ActivityIndicator color="#fff" size="large" />
+              <Text style={{ color: '#9ca3af', fontSize: 12, marginTop: 8, textAlign: 'center' }}>
+                正在連接直播流...
+              </Text>
+            </View>
+          )}
+          {/* 錯誤提示 */}
+          {status.error && (
+            <View style={{ position: 'absolute', alignSelf: 'center', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="warning-outline" size={40} color="#ef4444" />
+              <Text style={{ color: '#fff', fontSize: 14 }}>直播流暫時不可用</Text>
+              <Text style={{ color: '#9ca3af', fontSize: 12 }}>請稍後再試</Text>
+            </View>
+          )}
+        </View>
+        {/* 底部信息 */}
+        <View style={{ paddingHorizontal: 20, paddingBottom: 40, paddingTop: 16 }}>
+          <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>{camera.name}</Text>
+          <Text style={{ color: '#9ca3af', fontSize: 12, marginTop: 4 }}>澳門交通事務局 DSAT 實時直播</Text>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 // ── 攝像頭卡片 ────────────────────────────────────────────────────────────────
 function CameraCard({ camera, zhuhaiStatus, onFavToggle, isFav }: {
   camera: any;
@@ -101,6 +156,7 @@ function CameraCard({ camera, zhuhaiStatus, onFavToggle, isFav }: {
 }) {
   const imgUrl = getCameraImgUrl(camera);
   const badge = getCongestionBadgeForCamera(camera, zhuhaiStatus || null);
+  const [showPlayer, setShowPlayer] = useState(false);
   // 圖片 URL 加時間戳（每 10 秒更新一次，防緩存）
   const [tick, setTick] = useState(Math.floor(Date.now() / 10000));
   useEffect(() => {
@@ -108,9 +164,13 @@ function CameraCard({ camera, zhuhaiStatus, onFavToggle, isFav }: {
     return () => clearInterval(t);
   }, []);
   const timedUrl = imgUrl ? `${imgUrl}${imgUrl.includes('?') ? '&' : '?'}t=${tick}` : null;
+  const isHls = camera.streamType === 'hls' && !!camera.streamUrl;
 
   return (
     <View style={s.card}>
+      {showPlayer && isHls && (
+        <HlsPlayerModal camera={camera} onClose={() => setShowPlayer(false)} />
+      )}
       <View style={s.imgBox}>
         {timedUrl ? (
           <Image
@@ -119,10 +179,19 @@ function CameraCard({ camera, zhuhaiStatus, onFavToggle, isFav }: {
             resizeMode="cover"
           />
         ) : (
-          <View style={[s.img, s.imgPlaceholder]}>
+          <TouchableOpacity
+            style={[s.img, s.imgPlaceholder]}
+            onPress={isHls ? () => setShowPlayer(true) : undefined}
+            activeOpacity={isHls ? 0.7 : 1}
+          >
             <Ionicons name="videocam-outline" size={20} color="#9ca3af" />
-            <Text style={s.imgPlaceholderText}>點擊播放</Text>
-          </View>
+            <Text style={s.imgPlaceholderText}>{isHls ? '點擊播放直播' : '暫無畫面'}</Text>
+            {isHls && (
+              <View style={s.playBadge}>
+                <Ionicons name="play-circle" size={28} color={APP_ORANGE} />
+              </View>
+            )}
+          </TouchableOpacity>
         )}
         {badge && (
           <View style={[s.badge, { backgroundColor: badge.bg, borderColor: badge.color }]}>
@@ -458,13 +527,15 @@ const s = StyleSheet.create({
   subHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 },
   subIcon: { fontSize: 14 },
   subTitle: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingTop: 12 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 4 },
+  gridFav: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingTop: 12 },
   gridItem: { width: '47%' },
   card: { backgroundColor: '#f9fafb', borderRadius: 8, overflow: 'hidden' },
   imgBox: { position: 'relative', aspectRatio: 16 / 9, backgroundColor: '#e5e7eb' },
   img: { width: '100%', height: '100%' },
   imgPlaceholder: { justifyContent: 'center', alignItems: 'center', gap: 4 },
   imgPlaceholderText: { fontSize: 10, color: '#9ca3af' },
+  playBadge: { position: 'absolute', bottom: 6, right: 6 },
   badge: {
     position: 'absolute', top: 4, left: 4,
     paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, borderWidth: 1,
