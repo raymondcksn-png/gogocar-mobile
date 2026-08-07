@@ -373,7 +373,11 @@ function PostItem({ post, tagColorMap }: { post: any; tagColorMap: Record<string
   const router = useRouter();
   const brandDisplay = post.brand || post.brandName || '';
   const modelDisplay = post.modelSeries || post.modelName || '';
-  const title = [brandDisplay, modelDisplay].filter(Boolean).join(' ') || '未命名車源';
+  // 若 modelName 包含規格分隔符（｜或|），只取第一段，避免標題過長
+  const cleanModel = modelDisplay.includes('｜') || modelDisplay.includes('|')
+    ? modelDisplay.split(/[｜|]/)[0].trim()
+    : modelDisplay;
+  const title = [brandDisplay, cleanModel].filter(Boolean).join(' ') || '未命名車源';
   const price = post.price && Number(post.price) > 0
     ? `HKD ${Number(post.price).toLocaleString()}` : '面議';
   const img = resolveImageUrl(post.coverImageUrl || post.coverUrl);

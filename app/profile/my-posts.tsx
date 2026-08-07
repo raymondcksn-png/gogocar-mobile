@@ -13,6 +13,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { trpc, resolveImageUrl } from '../../lib/trpc';
+import { useQueryClient } from '@tanstack/react-query';
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../../constants/data';
 
 // 狀態 Tab（對齊 WebApp AppSell.tsx + 新增「已過期」Tab）
@@ -213,6 +214,13 @@ export default function MyPostsScreen() {
   const [activeTab, setActiveTab] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
   const [upgradeModal, setUpgradeModal] = useState<{ postId: number; title: string } | null>(null);
+  const queryClient = useQueryClient();
+
+  // 增值服務成功後同時刷新首頁列表，確保精選/置頂標籤即時顯示
+  const handleUpgradeSuccess = () => {
+    refetch();
+    queryClient.invalidateQueries({ queryKey: [['vehicle', 'listPosts']] });
+  };
 
   const { data, isLoading, refetch } = trpc.vehicle.myPosts.useQuery(
     activeTab === 'all' ? undefined : { status: activeTab }
@@ -442,7 +450,7 @@ export default function MyPostsScreen() {
           postTitle={upgradeModal.title}
           settings={settings}
           onClose={() => setUpgradeModal(null)}
-          onSuccess={() => refetch()}
+          onSuccess={handleUpgradeSuccess}
         />
       )}
     </View>

@@ -30,7 +30,11 @@ function VehicleListItem({ post, tagColorMap }: { post: any; tagColorMap?: Recor
   const router = useRouter();
   const brandDisplay = post.brand || post.brandName || '';
   const modelDisplay = post.modelSeries || post.modelName || '';
-  const infoLine = [brandDisplay, modelDisplay].filter(Boolean).join(' ') || '未命名車源';
+  // 若 modelName 包含規格分隔符（｜或|），只取第一段（品牌+車系），避免標題過長
+  const cleanModel = modelDisplay.includes('｜') || modelDisplay.includes('|')
+    ? modelDisplay.split(/[｜|]/)[0].trim()
+    : modelDisplay;
+  const infoLine = [brandDisplay, cleanModel].filter(Boolean).join(' ') || '未命名車源';
   const priceTxt =
     post.price && Number(post.price) > 0
       ? `HKD ${Number(post.price).toLocaleString()}`
