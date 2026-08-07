@@ -4,7 +4,7 @@
  * 操作按鈕（內嵌卡片）：預覽 / 編輯 / 刷新 / 下架 / 重新上架 / 標記已售 / 增值服務 / 刪除
  * 增值服務 Modal：置頂車源 / 精選推廣 / 急售標籤 / 相片增強（iPoint 支付）
  */
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, Alert, RefreshControl, ScrollView, Modal,
@@ -215,6 +215,9 @@ export default function MyPostsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [upgradeModal, setUpgradeModal] = useState<{ postId: number; title: string } | null>(null);
   const queryClient = useQueryClient();
+  // 批量操作模式
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   // 增值服務成功後同時刷新首頁列表，確保精選/置頂標籤即時顯示
   const handleUpgradeSuccess = () => {
@@ -227,6 +230,54 @@ export default function MyPostsScreen() {
   );
   const { data: settingsData } = trpc.admin.getSettings.useQuery();
   const settings = (settingsData || {}) as Record<string, string>;
+
+  // 車商統計（activeRole === 'dealer' 時顯示）
+  const { data: authData } = trpc.auth.me.useQuery();
+  const activeRole = (authData as any)?.activeRole;
+  const isDealer = activeRole === 'dealer';
+  const { data: dealerStats } = trpc.vehicle.myDealerStats.useQuery(undefined, { enabled: isDealer });
+
+  // 批量操作 mutations
+  const batchRefreshMut = trpc.vehicle.batchRefreshPosts.useMutation({
+    onSuccess: (res: any) => {
+      Alert.alert('批量刷新成功', `已刷新 ${res.refreshedCount} 條車源，剩餘 ${res.balanceAfter} iP`);
+      setBatchMode(false); setSelectedIds(new Set()); refetch();
+    },
+    onError: (e: any) => Alert.alert('批量刷新失敗', e.message),
+  });
+  const batchUnlistMut = trpc.vehicle.batchUnlistPosts.useMutation({
+    onSuccess: (res: any) => {
+      Alert.alert('批量下架成功', `已下架 ${res.unlistedCount} 條車源`);
+      setBatchMode(false); setSelectedIds(new Set()); refetch();
+    },
+    onError: (e: any) => Alert.alert('批量下架失敗', e.message),
+  });
+  const toggleSelect = useCallback((id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+  const posts = (data as any)?.items || [];
+  const toggleSelectAll = useCallback(() => {
+    const activeIds = posts.filter((p: any) => (p.displayStatus || p.status) === 'active').map((p: any) => p.id);
+    setSelectedIds(prev => prev.size === activeIds.length ? new Set() : new Set(activeIds));
+  }, [posts]);
+  const handleBatchRefresh = () => {
+    if (selectedIds.size === 0) { Alert.alert('提示', '請先選擇要刷新的車源'); return; }
+    Alert.alert('批量刷新', `將刷新 ${selectedIds.size} 條車源，消耗 ${selectedIds.size} iPoint，確認？`, [
+      { text: '取消', style: 'cancel' },
+      { text: '確認刷新', onPress: () => batchRefreshMut.mutate({ postIds: Array.from(selectedIds) }) },
+    ]);
+  };
+  const handleBatchUnlist = () => {
+    if (selectedIds.size === 0) { Alert.alert('提示', '請先選擇要下架的車源'); return; }
+    Alert.alert('批量下架', `將下架 ${selectedIds.size} 條車源，確認？`, [
+      { text: '取消', style: 'cancel' },
+      { text: '確認下架', style: 'destructive', onPress: () => batchUnlistMut.mutate({ postIds: Array.from(selectedIds) }) },
+    ]);
+  };
 
   const updateStatusMut = trpc.vehicle.updateStatus.useMutation({
     onSuccess: () => refetch(),
@@ -241,7 +292,6 @@ export default function MyPostsScreen() {
     onError: (e: any) => Alert.alert('刷新失敗', e.message),
   });
 
-  const posts = (data as any)?.items || [];
 
   const onRefresh = async () => { setRefreshing(true); await refetch(); setRefreshing(false); };
 
@@ -273,10 +323,20 @@ export default function MyPostsScreen() {
     const pinnedDays   = daysLeft(item.pinnedExpireAt);
     const featuredDays = daysLeft(item.featuredExpireAt);
 
+    const isSelected = selectedIds.has(item.id);
     return (
-      <View style={s.card}>
+      <View style={[s.card, isSelected && s.cardSelected]}>
         {/* 上半：圖片 + 信息 */}
-        <TouchableOpacity style={s.cardMain} onPress={() => router.push(`/vehicle/${item.id}`)} activeOpacity={0.75}>
+        <TouchableOpacity
+          style={s.cardMain}
+          onPress={() => batchMode ? toggleSelect(item.id) : router.push(`/vehicle/${item.id}`)}
+          activeOpacity={0.75}
+        >
+          {batchMode && (
+            <View style={s.checkCircle}>
+              <Ionicons name={isSelected ? "checkmark-circle" : "ellipse-outline"} size={22} color={isSelected ? APP_ORANGE : '#d1d5db'} />
+            </View>
+          )}
           <View style={s.imgWrap}>
             {img ? (
               <Image source={{ uri: img }} style={s.img} contentFit="cover" />
@@ -395,12 +455,58 @@ export default function MyPostsScreen() {
         <TouchableOpacity style={s.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={24} color={APP_TEXT} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>我的車源</Text>
-        <TouchableOpacity style={s.addBtn} onPress={() => router.push('/(tabs)/sell')} activeOpacity={0.7}>
-          <Ionicons name="add" size={26} color={APP_ORANGE} />
-        </TouchableOpacity>
+        <Text style={s.headerTitle}>{isDealer && dealerStats?.dealerName ? dealerStats.dealerName : '我的車源'}</Text>
+        <View style={{ flexDirection: 'row', gap: 4 }}>
+          {!batchMode ? (
+            <>
+              <TouchableOpacity style={s.addBtn} onPress={() => { setBatchMode(true); setSelectedIds(new Set()); }} activeOpacity={0.7}>
+                <Ionicons name="checkmark-circle-outline" size={22} color={APP_GRAY} />
+              </TouchableOpacity>
+              <TouchableOpacity style={s.addBtn} onPress={() => router.push('/(tabs)/sell')} activeOpacity={0.7}>
+                <Ionicons name="add" size={26} color={APP_ORANGE} />
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity style={s.addBtn} onPress={() => { setBatchMode(false); setSelectedIds(new Set()); }} activeOpacity={0.7}>
+              <Text style={{ fontSize: 14, color: APP_ORANGE, fontWeight: '600' }}>取消</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
+      {/* 車商統計欄（僅車商身份顯示） */}
+      {isDealer && dealerStats && (
+        <View style={s.dealerStats}>
+          <View style={s.dealerStatItem}>
+            <Text style={s.dealerStatNum}>{dealerStats.activeCount}</Text>
+            <Text style={s.dealerStatLabel}>在售車源</Text>
+          </View>
+          <View style={s.dealerStatDivider} />
+          <View style={s.dealerStatItem}>
+            <Text style={s.dealerStatNum}>{dealerStats.monthViews}</Text>
+            <Text style={s.dealerStatLabel}>本月瀏覽</Text>
+          </View>
+        </View>
+      )}
+      {/* 批量操作工具欄 */}
+      {batchMode && (
+        <View style={s.batchBar}>
+          <TouchableOpacity onPress={toggleSelectAll} activeOpacity={0.7} style={s.batchSelectAll}>
+            <Ionicons name={selectedIds.size > 0 ? "checkmark-circle" : "ellipse-outline"} size={18} color={APP_ORANGE} />
+            <Text style={s.batchSelectAllText}>全選在售 ({selectedIds.size})</Text>
+          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity style={s.batchBtn} onPress={handleBatchRefresh} activeOpacity={0.7} disabled={batchRefreshMut.isPending}>
+              <Ionicons name="refresh-outline" size={14} color={APP_ORANGE} />
+              <Text style={[s.batchBtnText, { color: APP_ORANGE }]}>批量刷新</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.batchBtn, { backgroundColor: '#FEF2F2' }]} onPress={handleBatchUnlist} activeOpacity={0.7} disabled={batchUnlistMut.isPending}>
+              <Ionicons name="chevron-down-outline" size={14} color="#dc2626" />
+              <Text style={[s.batchBtnText, { color: '#dc2626' }]}>批量下架</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       {/* 狀態篩選 Tab */}
       <View style={s.tabBarWrap}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabBar}>
@@ -536,4 +642,19 @@ const s = StyleSheet.create({
   upgradeTagFeatured: { backgroundColor: '#FFF7ED' },
   upgradeTagText: { fontSize: 10, fontWeight: '600', color: '#92400E' },
   upgradeTagFeaturedText: { color: '#C2410C' },
+  // 車商統計欄
+  dealerStats: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 0.5, borderBottomColor: APP_BORDER, paddingVertical: 12 },
+  dealerStatItem: { flex: 1, alignItems: 'center' },
+  dealerStatNum: { fontSize: 20, fontWeight: '700', color: APP_ORANGE },
+  dealerStatLabel: { fontSize: 11, color: APP_GRAY, marginTop: 2 },
+  dealerStatDivider: { width: 0.5, backgroundColor: APP_BORDER, marginVertical: 4 },
+  // 批量操作工具欄
+  batchBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFF7ED', paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: '#FFE4B5' },
+  batchSelectAll: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  batchSelectAllText: { fontSize: 13, color: APP_TEXT, fontWeight: '500' },
+  batchBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: APP_ORANGE, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  batchBtnText: { fontSize: 12, fontWeight: '600' },
+  // 批量選擇卡片
+  cardSelected: { backgroundColor: '#FFF7ED' },
+  checkCircle: { marginRight: 8, justifyContent: 'center' },
 });
