@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView, Platform, AppState,
   RefreshControl,
 } from 'react-native';
+import * as Linking from 'expo-linking';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { trpc, API_BASE_URL, resolveImageUrl } from '../../lib/trpc';
@@ -55,7 +56,7 @@ const METHOD_TYPE_ICON: Record<string, string> = {
 };
 
 // ── 主組件 ────────────────────────────────────────────────────────────────
-type Screen = 'main' | 'recharge-step1' | 'recharge-detail' | 'recharge-proof' | 'recharge-success';
+type Screen = 'main' | 'recharge-step1' | 'recharge-detail' | 'recharge-proof' | 'recharge-success' | 'alipay-pending';
 
 export default function IPointScreen() {
   const router = useRouter();
@@ -72,6 +73,8 @@ export default function IPointScreen() {
   const [orderNo, setOrderNo] = useState('');
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [alipayPolling, setAlipayPolling] = useState(false);
+  const alipayPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 財務敗感查詢：staleTime:0 保證每次進入頁面都重新請求，不使用快取
   const { data: balanceData, refetch: refetchBalance } = trpc.ipoint.getBalance.useQuery(
@@ -109,6 +112,50 @@ export default function IPointScreen() {
 
   const createOrderMut = trpc.payment.createOrder.useMutation();
   const uploadReceiptMut = trpc.payment.uploadReceipt.useMutation();
+  const createAlipayOrderMut = trpc.payment.createAlipayOrder.useMutation();
+  const utils = trpc.useUtils();
+
+  // ── 支付寶 App 支付 ──
+  const handleAlipayPay = async () => {
+    if (!finalAmount || finalAmount < 1) { Alert.alert('提示', '請輸入有效金額'); return; }
+    setSubmitting(true);
+    try {
+      const result = await createAlipayOrderMut.mutateAsync({
+        amount: finalAmount,
+        ipointAmount: ipointAmount,
+      });
+      setOrderNo(result.orderNo);
+      const alipayScheme = Platform.OS === 'ios' ? 'alipays://' : 'alipayqr://';
+      const canOpen = await Linking.canOpenURL(alipayScheme);
+      if (canOpen) {
+        await Linking.openURL(`${alipayScheme}platformapi/startapp?saId=10000007&qrcode=${encodeURIComponent(result.orderString)}`);
+      } else {
+        Alert.alert('提示', '請先安裝支付寶 APP 才能使用此支付方式');
+        setSubmitting(false);
+        return;
+      }
+      setScreen('alipay-pending');
+      let count = 0;
+      alipayPollRef.current = setInterval(async () => {
+        count++;
+        if (count > 100) { clearInterval(alipayPollRef.current!); setAlipayPolling(false); return; }
+        try {
+          const res = await utils.payment.queryAlipayOrder.fetch({ orderNo: result.orderNo });
+          if (res?.status === 'TRADE_SUCCESS') {
+            clearInterval(alipayPollRef.current!);
+            setAlipayPolling(false);
+            refetchBalance(); refetchTx(); refetchOrders();
+            setScreen('recharge-success');
+          }
+        } catch {}
+      }, 3000);
+      setAlipayPolling(true);
+    } catch (e: any) {
+      Alert.alert('錯誤', e.message || '創建支付寶訂單失敗');
+    }
+    setSubmitting(false);
+  };
+
 
   const finalAmount = customAmount ? Number(customAmount) : rechargeAmount;
   const ipointAmount = Math.floor(finalAmount);
@@ -202,7 +249,50 @@ export default function IPointScreen() {
     setOrderNo('');
     setReceiptUri(null);
     setSubmitting(false);
+    if (alipayPollRef.current) { clearInterval(alipayPollRef.current); alipayPollRef.current = null; }
+    setAlipayPolling(false);
   }, []);
+
+  // ── 支付寶等待確認頁面 ──
+  if (screen === 'alipay-pending') {
+    return (
+      <View style={s.container}>
+        <View style={s.header}><Text style={s.headerTitle}>等待支付確認</Text></View>
+        <View style={s.successWrap}>
+          <View style={[s.successIcon, { backgroundColor: '#EFF6FF' }]}>
+            <Text style={{ fontSize: 40 }}>💙</Text>
+          </View>
+          <Text style={s.successTitle}>等待支付寶確認</Text>
+          <Text style={s.successSub}>請在支付寶 APP 完成付款{'\n'}完成後自動返回此頁面</Text>
+          <View style={s.successCard}>
+            <SRow label="訂單號" value={orderNo} mono />
+            <SRow label="充值金額" value={`RMB ${finalAmount}`} orange />
+            <SRow label="iPoint" value={`${ipointAmount} iP`} />
+            <SRow label="狀態" value={alipayPolling ? '等待支付中...' : '已超時'} amber />
+          </View>
+          {alipayPolling && <ActivityIndicator color={APP_ORANGE} style={{ marginBottom: 16 }} />}
+          <TouchableOpacity style={[s.primaryBtn, { backgroundColor: '#3B82F6' }]} onPress={async () => {
+            try {
+              const res = await utils.payment.queryAlipayOrder.fetch({ orderNo });
+              if (res?.status === 'TRADE_SUCCESS') {
+                if (alipayPollRef.current) clearInterval(alipayPollRef.current);
+                setAlipayPolling(false);
+                refetchBalance(); refetchTx(); refetchOrders();
+                setScreen('recharge-success');
+              } else {
+                Alert.alert('提示', '支付尚未完成，請在支付寶 APP 完成付款後再試');
+              }
+            } catch (e: any) { Alert.alert('查詢失敗', e.message); }
+          }} activeOpacity={0.8}>
+            <Text style={s.primaryBtnText}>我已完成付款</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={{ marginTop: 12 }} onPress={resetRecharge}>
+            <Text style={{ fontSize: 14, color: APP_GRAY }}>取消支付</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   if (!isLoggedIn) {
     return (
@@ -224,13 +314,13 @@ export default function IPointScreen() {
         <View style={s.header}><Text style={s.headerTitle}>充值 iPoint</Text></View>
         <View style={s.successWrap}>
           <View style={s.successIcon}><Text style={{ fontSize: 40 }}>✅</Text></View>
-          <Text style={s.successTitle}>憑證已提交</Text>
-          <Text style={s.successSub}>工作時間（09:00–18:00）內審核並充值</Text>
+          <Text style={s.successTitle}>{orderNo.startsWith('ALI-') ? '支付成功！' : '憑證已提交'}</Text>
+          <Text style={s.successSub}>{orderNo.startsWith('ALI-') ? 'iPoint 已即時到帳' : '工作時間（09:00–18:00）內審核並充值'}</Text>
           <View style={s.successCard}>
             <SRow label="訂單號" value={orderNo} mono />
             <SRow label="充值金額" value={`MOP ${finalAmount}`} orange />
             <SRow label="iPoint" value={`${ipointAmount} iP`} />
-            <SRow label="狀態" value="等待審核" amber />
+            <SRow label="狀態" value={orderNo.startsWith('ALI-') ? '支付成功' : '等待審核'} amber={!orderNo.startsWith('ALI-')} orange={orderNo.startsWith('ALI-')} />
           </View>
           <TouchableOpacity style={s.primaryBtn} onPress={resetRecharge}>
             <Text style={s.primaryBtnText}>返回 iPoint 頁面</Text>
@@ -427,9 +517,16 @@ export default function IPointScreen() {
             <Text style={s.methodIcon}>💙</Text>
             <View style={{ flex: 1 }}>
               <Text style={s.methodNameDisabled}>支付寶</Text>
-              <Text style={s.methodType}>掃碼支付（即將開通）</Text>
+              <Text style={s.methodType}>App 支付（人民幣 RMB）</Text>
             </View>
-            <View style={s.comingSoonBadge}><Text style={s.comingSoonText}>即將開通</Text></View>
+            <TouchableOpacity
+              style={[s.primaryBtn, { marginTop: 8, backgroundColor: '#1677FF' }, (submitting || !finalAmount || finalAmount < 1) && s.primaryBtnDisabled]}
+              onPress={handleAlipayPay}
+              disabled={submitting || !finalAmount || finalAmount < 1}
+              activeOpacity={0.8}
+            >
+              {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.primaryBtnText}>支付寶支付</Text>}
+            </TouchableOpacity>
           </View>
 
           <View style={{ height: 16 }} />
