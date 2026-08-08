@@ -13,6 +13,8 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const GA4_ENDPOINT = 'https://www.google-analytics.com/mp/collect';
+// Firebase APP 串流使用 firebase_app_id（非網頁串流的 measurement_id）
+// 文檔：https://developers.google.com/analytics/devguides/collection/protocol/ga4/reference?client_type=firebase
 const CLIENT_ID_KEY = '@gogocar_ga4_client_id';
 
 interface GA4Config {
@@ -83,7 +85,8 @@ export async function logEvent(
   const platformConfig = Platform.OS === 'ios' ? state.config.ios : state.config.android;
   const { streamId, apiSecret, appId } = platformConfig;
 
-  const url = `${GA4_ENDPOINT}?measurement_id=${streamId}&api_secret=${apiSecret}`;
+  // Firebase APP 串流必須用 firebase_app_id（不是 measurement_id/streamId）
+  const url = `${GA4_ENDPOINT}?firebase_app_id=${encodeURIComponent(appId)}&api_secret=${apiSecret}`;
 
   const payload = {
     client_id: state.clientId,
