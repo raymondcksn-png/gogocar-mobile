@@ -161,15 +161,16 @@ export default function IPointScreen() {
         ipointAmount: finalIPoint,
       });
       setOrderNo(result.orderNo);
-      const alipayScheme = Platform.OS === 'ios' ? 'alipays://' : 'alipayqr://';
-      const canOpen = await Linking.canOpenURL(alipayScheme);
-      if (canOpen) {
-        await Linking.openURL(`${alipayScheme}platformapi/startapp?saId=10000007&qrcode=${encodeURIComponent(result.orderString)}`);
-      } else {
-        Alert.alert('提示', '請先安裝支付寶 APP 才能使用此支付方式');
-        setSubmitting(false);
-        return;
-      }
+      // 直接調起支付寶 APP（不用 canOpenURL 前置檢查）
+      // iOS 14+ 需要 Info.plist 聲明 LSApplicationQueriesSchemes，Expo Go 不支持此查詢
+      // 直接 openURL，如果沒有安裝支付寶 APP 系統會自動提示
+      const alipayUrl = Platform.OS === 'ios'
+        ? `alipays://platformapi/startapp?saId=10000007&qrcode=${encodeURIComponent(result.orderString)}`
+        : `alipayqr://platformapi/startapp?saId=10000007&qrcode=${encodeURIComponent(result.orderString)}`;
+      await Linking.openURL(alipayUrl).catch(() => {
+        // 備用方案：嘗試通用 alipay:// scheme
+        return Linking.openURL(`alipay://platformapi/startapp?saId=10000007&qrcode=${encodeURIComponent(result.orderString)}`);
+      });
       setScreen('alipay-pending');
       let count = 0;
       alipayPollRef.current = setInterval(async () => {
