@@ -87,7 +87,6 @@ export async function logEvent(
 
   const payload = {
     client_id: state.clientId,
-    app_instance_id: state.appInstanceId,
     non_personalized_ads: false,
     events: [{
       name: eventName,
@@ -96,6 +95,7 @@ export async function logEvent(
         app_id: appId,
         platform: Platform.OS,
         engagement_time_msec: 1,
+        ...(state.appInstanceId ? { app_instance_id: state.appInstanceId } : {}),
       },
     }],
   };
