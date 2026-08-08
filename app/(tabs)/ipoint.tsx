@@ -18,7 +18,15 @@ import { useAuth } from '../../contexts/AuthContext';
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../../constants/data';
 
 // ── 常量 ──────────────────────────────────────────────────────────────────
-const PRESET_AMOUNTS = [50, 100, 200, 500, 1000];
+// iPoint 套餐（以 iPoint 為單位，1 iP = 1 MOP）
+const PRESET_IPOINTS = [
+  { ipoint: 50,   label: '50 iP',   bonus: '' },
+  { ipoint: 100,  label: '100 iP',  bonus: '' },
+  { ipoint: 200,  label: '200 iP',  bonus: '' },
+  { ipoint: 500,  label: '500 iP',  bonus: '+20 iP' },
+  { ipoint: 1000, label: '1000 iP', bonus: '+50 iP' },
+  { ipoint: 2000, label: '2000 iP', bonus: '+150 iP' },
+];
 
 const TX_TYPE_TABS = [
   { key: undefined, label: '全部' },
@@ -66,8 +74,8 @@ export default function IPointScreen() {
   const [txFilterType, setTxFilterType] = useState<string | undefined>(undefined);
 
   // 充值流程狀態
-  const [rechargeAmount, setRechargeAmount] = useState<number>(100);
-  const [customAmount, setCustomAmount] = useState('');
+  const [selectedIPoint, setSelectedIPoint] = useState<number>(100);
+  const [customIPoint, setCustomIPoint] = useState('');
   const [selectedMethod, setSelectedMethod] = useState<any>(null);
   const [remark, setRemark] = useState('');
   const [orderNo, setOrderNo] = useState('');
@@ -115,14 +123,24 @@ export default function IPointScreen() {
   const createAlipayOrderMut = trpc.payment.createAlipayOrder.useMutation();
   const utils = trpc.useUtils();
 
+  // 獲取匯率（用於顯示 RMB 等值）
+  const { data: rateData } = trpc.wechatPay.getExchangeRate.useQuery(undefined, { staleTime: 5 * 60 * 1000 });
+  const mopToCny = rateData?.rate ?? 0.88;
+
+  // 最終 iPoint 數量
+  const finalIPoint = customIPoint ? Math.max(1, parseInt(customIPoint) || 1) : selectedIPoint;
+  // 對應 MOP 金額（1 iP = 1 MOP）
+  const mopAmount = finalIPoint;
+  // 對應 RMB 金額（動態匯率換算）
+  const cnyAmount = Math.max(0.01, Math.round(mopAmount * mopToCny * 100) / 100);
+
   // ── 支付寶 App 支付 ──
   const handleAlipayPay = async () => {
-    if (!finalAmount || finalAmount < 1) { Alert.alert('提示', '請輸入有效金額'); return; }
+    if (!finalIPoint || finalIPoint < 1) { Alert.alert('提示', '請選擇充值 iPoint 數量'); return; }
     setSubmitting(true);
     try {
       const result = await createAlipayOrderMut.mutateAsync({
-        amount: finalAmount,
-        ipointAmount: ipointAmount,
+        ipointAmount: finalIPoint,
       });
       setOrderNo(result.orderNo);
       const alipayScheme = Platform.OS === 'ios' ? 'alipays://' : 'alipayqr://';
@@ -157,17 +175,15 @@ export default function IPointScreen() {
   };
 
 
-  const finalAmount = customAmount ? Number(customAmount) : rechargeAmount;
-  const ipointAmount = Math.floor(finalAmount);
 
   const handleOfflineNext = async () => {
     if (!selectedMethod) { Alert.alert('提示', '請選擇支付方式'); return; }
-    if (!finalAmount || finalAmount < 1) { Alert.alert('提示', '請輸入有效金額'); return; }
+    if (!finalIPoint || finalIPoint < 1) { Alert.alert('提示', '請選擇充值 iPoint 數量'); return; }
     setSubmitting(true);
     try {
       const result = await createOrderMut.mutateAsync({
         methodId: selectedMethod.id,
-        amount: finalAmount,
+        amount: mopAmount,
         remark: remark || undefined,
       });
       setOrderNo(result.orderNo);
@@ -242,8 +258,8 @@ export default function IPointScreen() {
 
   const resetRecharge = useCallback(() => {
     setScreen('main');
-    setRechargeAmount(100);
-    setCustomAmount('');
+    setSelectedIPoint(100);
+    setCustomIPoint('');
     setSelectedMethod(null);
     setRemark('');
     setOrderNo('');
@@ -266,8 +282,8 @@ export default function IPointScreen() {
           <Text style={s.successSub}>請在支付寶 APP 完成付款{'\n'}完成後自動返回此頁面</Text>
           <View style={s.successCard}>
             <SRow label="訂單號" value={orderNo} mono />
-            <SRow label="充值金額" value={`RMB ${finalAmount}`} orange />
-            <SRow label="iPoint" value={`${ipointAmount} iP`} />
+            <SRow label="充值金額" value={`RMB ${cnyAmount}`} orange />
+            <SRow label="iPoint" value={`${finalIPoint} iP`} />
             <SRow label="狀態" value={alipayPolling ? '等待支付中...' : '已超時'} amber />
           </View>
           {alipayPolling && <ActivityIndicator color={APP_ORANGE} style={{ marginBottom: 16 }} />}
@@ -318,8 +334,8 @@ export default function IPointScreen() {
           <Text style={s.successSub}>{orderNo.startsWith('ALI-') ? 'iPoint 已即時到帳' : '工作時間（09:00–18:00）內審核並充值'}</Text>
           <View style={s.successCard}>
             <SRow label="訂單號" value={orderNo} mono />
-            <SRow label="充值金額" value={`MOP ${finalAmount}`} orange />
-            <SRow label="iPoint" value={`${ipointAmount} iP`} />
+            <SRow label="充值金額" value={`MOP ${mopAmount}`} orange />
+            <SRow label="iPoint" value={`${finalIPoint} iP`} />
             <SRow label="狀態" value={orderNo.startsWith('ALI-') ? '支付成功' : '等待審核'} amber={!orderNo.startsWith('ALI-')} orange={orderNo.startsWith('ALI-')} />
           </View>
           <TouchableOpacity style={s.primaryBtn} onPress={resetRecharge}>
@@ -342,7 +358,7 @@ export default function IPointScreen() {
         </View>
         <ScrollView contentContainerStyle={s.formContent}>
           <Text style={s.formMeta}>訂單號：{orderNo}</Text>
-          <Text style={s.formMeta}>金額：MOP {finalAmount} → {ipointAmount} iPoint</Text>
+          <Text style={s.formMeta}>充值：{finalIPoint} iPoint（MOP {mopAmount}）</Text>
           <View style={{ height: 16 }} />
           <Text style={s.fieldLabel}>上傳轉帳截圖</Text>
           <TouchableOpacity style={s.uploadBox} onPress={handlePickImage} activeOpacity={0.7}>
@@ -390,7 +406,7 @@ export default function IPointScreen() {
             <View style={{ flex: 1 }}>
               <Text style={s.methodDetailName}>{selectedMethod.name}</Text>
               <Text style={s.methodDetailType}>{METHOD_TYPE_LABEL[selectedMethod.type] || selectedMethod.type}</Text>
-              <Text style={s.methodDetailAmount}>MOP {finalAmount} → {ipointAmount} iPoint</Text>
+              <Text style={s.methodDetailAmount}>{finalIPoint} iPoint（MOP {mopAmount}）</Text>
             </View>
           </View>
           <View style={s.detailCard}>
@@ -445,33 +461,43 @@ export default function IPointScreen() {
           <Text style={s.headerTitle}>充值 iPoint</Text>
         </View>
         <ScrollView contentContainerStyle={s.formContent} keyboardShouldPersistTaps="handled">
-          <Text style={s.sectionLabel}>選擇充值金額</Text>
+          <Text style={s.sectionLabel}>選擇充值套餐</Text>
           <View style={s.amountGrid}>
-            {PRESET_AMOUNTS.map((a) => {
-              const active = rechargeAmount === a && !customAmount;
+            {PRESET_IPOINTS.map((pkg) => {
+              const active = selectedIPoint === pkg.ipoint && !customIPoint;
               return (
                 <TouchableOpacity
-                  key={a}
+                  key={pkg.ipoint}
                   style={[s.amountBtn, active && s.amountBtnActive]}
-                  onPress={() => { setRechargeAmount(a); setCustomAmount(''); }}
+                  onPress={() => { setSelectedIPoint(pkg.ipoint); setCustomIPoint(''); }}
                   activeOpacity={0.7}
                 >
-                  <Text style={[s.amountBtnText, active && s.amountBtnTextActive]}>MOP {a}</Text>
+                  <Text style={[s.amountBtnText, active && s.amountBtnTextActive]}>{pkg.label}</Text>
+                  <Text style={{ fontSize: 11, color: active ? APP_ORANGE : APP_GRAY, marginTop: 2 }}>MOP {pkg.ipoint}</Text>
+                  {pkg.bonus ? <Text style={{ fontSize: 10, color: '#16a34a', fontWeight: '700' }}>{pkg.bonus}</Text> : null}
                 </TouchableOpacity>
               );
             })}
           </View>
           <TextInput
             style={s.customInput}
-            value={customAmount}
-            onChangeText={setCustomAmount}
-            placeholder="自定義金額 (MOP)"
+            value={customIPoint}
+            onChangeText={setCustomIPoint}
+            placeholder="自定義 iPoint 數量"
             placeholderTextColor={APP_GRAY}
             keyboardType="numeric"
           />
-          <View style={s.ipointRow}>
-            <Text style={s.ipointLabel}>對應 iPoint</Text>
-            <Text style={s.ipointValue}>{ipointAmount} iPoint</Text>
+          {/* 幣值換算顯示 */}
+          <View style={[s.ipointRow, { backgroundColor: '#FFF7ED', borderRadius: 10, padding: 10, marginTop: 8 }]}>
+            <View>
+              <Text style={s.ipointLabel}>充值 iPoint</Text>
+              <Text style={[s.ipointValue, { fontSize: 18 }]}>{finalIPoint} iP</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={s.ipointLabel}>等值金額</Text>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: APP_TEXT }}>MOP {mopAmount}</Text>
+              <Text style={{ fontSize: 11, color: APP_GRAY }}>≈ RMB {cnyAmount}（支付寶）</Text>
+            </View>
           </View>
 
           <Text style={[s.sectionLabel, { marginTop: 20 }]}>選擇支付方式</Text>
@@ -519,13 +545,13 @@ export default function IPointScreen() {
               <Text style={s.methodNameDisabled}>支付寶</Text>
               <Text style={s.methodType}>App 支付（人民幣 RMB）</Text>
             </View>
-            <TouchableOpacity
-              style={[s.primaryBtn, { marginTop: 8, backgroundColor: '#1677FF' }, (submitting || !finalAmount || finalAmount < 1) && s.primaryBtnDisabled]}
+          <TouchableOpacity
+              style={[s.primaryBtn, { marginTop: 8, backgroundColor: '#1677FF' }, (submitting || !finalIPoint || finalIPoint < 1) && s.primaryBtnDisabled]}
               onPress={handleAlipayPay}
-              disabled={submitting || !finalAmount || finalAmount < 1}
+              disabled={submitting || !finalIPoint || finalIPoint < 1}
               activeOpacity={0.8}
             >
-              {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.primaryBtnText}>支付寶支付</Text>}
+              {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.primaryBtnText}>支付寶支付 RMB {cnyAmount}</Text>}
             </TouchableOpacity>
           </View>
 
