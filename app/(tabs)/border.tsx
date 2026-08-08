@@ -58,6 +58,7 @@ function useCarparkData() {
   }, []);
 
   useEffect(() => {
+    fetchData(); // 立即執行一次，不等 60 秒
     const t = setInterval(fetchData, 60_000);
     return () => clearInterval(t);
   }, [fetchData]);
@@ -135,7 +136,15 @@ function getCongestionBadgeForCamera(camera: any, zhuhaiStatus: ZhuhaiStatusResp
 
 // ── 攝像頭圖片 URL ────────────────────────────────────────────────────────────
 function getCameraImgUrl(camera: any): string | null {
-  if (camera.streamType === 'hls') return null;
+  // DSAT HLS 攝像頭：用 imageUrl 欄位作縮圖（BMP 靜態截圖）
+  if (camera.streamType === 'hls' && camera.source === 'dsat') {
+    if (camera.imageUrl) {
+      const bmpId = camera.imageUrl.split('/').pop();
+      return `${API_BASE_URL}/api/traffic/dsat-img/${bmpId}`;
+    }
+    return null;
+  }
+  if (camera.streamType === 'hls') return null; // 其他 HLS 無縮圖
   if (camera.source === 'fsm') return `${API_BASE_URL}/api/traffic/fsm/${camera.sourceId}.jpg`;
   if (camera.source === 'gzazhka') return `${API_BASE_URL}/api/traffic/zhuhai/${camera.sourceId}`;
   if (camera.source === 'hktd') return `https://tdcctv.data.one.gov.hk/${camera.sourceId}.JPG`;
@@ -251,11 +260,22 @@ function CameraCard({ camera, zhuhaiStatus, onFavToggle, isFav }: {
       )}
       <View style={s.imgBox}>
         {timedUrl ? (
-          <Image
-            source={{ uri: timedUrl }}
-            style={s.img}
-            resizeMode="cover"
-          />
+          <TouchableOpacity
+            style={s.imgBox}
+            onPress={isHls ? () => setShowPlayer(true) : undefined}
+            activeOpacity={isHls ? 0.7 : 1}
+          >
+            <Image
+              source={{ uri: timedUrl }}
+              style={s.img}
+              resizeMode="cover"
+            />
+            {isHls && (
+              <View style={[s.playBadge, { bottom: 8, right: 8 }]}>
+                <Ionicons name="play-circle" size={28} color={APP_ORANGE} />
+              </View>
+            )}
+          </TouchableOpacity>
         ) : (
           <TouchableOpacity
             style={[s.img, s.imgPlaceholder]}
