@@ -68,7 +68,7 @@ type Screen = 'main' | 'recharge-step1' | 'recharge-detail' | 'recharge-proof' |
 
 export default function IPointScreen() {
   const router = useRouter();
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, user } = useAuth();
 
   const [screen, setScreen] = useState<Screen>('main');
   const [txFilterType, setTxFilterType] = useState<string | undefined>(undefined);
@@ -126,8 +126,19 @@ export default function IPointScreen() {
   // 獲取匯率（用於顯示 RMB 等值）
   const { data: rateData } = trpc.wechatPay.getExchangeRate.useQuery(undefined, { staleTime: 5 * 60 * 1000 });
   const mopToCny = rateData?.rate ?? 0.88;
+  const mopToHkd = (rateData as any)?.hkdRate ?? 0.97;
   // 從後台讀取套餐配置（動態）
   const packages = (rateData as any)?.packages ?? DEFAULT_PACKAGES;
+
+  // ── 根據用戶手機號前綴判斷地域 ──────────────────────────────────────────
+  // +853 澳門 | +852 香港 | +86 大陸 | 其他默認澳門
+  const userRegion = (() => {
+    const phone = user?.phone ?? '';
+    if (phone.startsWith('+852') || phone.startsWith('852')) return 'hk';
+    if (phone.startsWith('+86') || phone.startsWith('86')) return 'cn';
+    return 'mo'; // 默認澳門（+853 或未知）
+  })();
+  const regionCurrencyLabel = { mo: 'MOP', hk: 'HKD', cn: 'RMB' }[userRegion];
 
   // 最終 iPoint 數量
   const finalIPoint = customIPoint ? Math.max(1, parseInt(customIPoint) || 1) : selectedIPoint;
@@ -135,6 +146,11 @@ export default function IPointScreen() {
   const mopAmount = finalIPoint;
   // 對應 RMB 金額（動態匯率換算）
   const cnyAmount = Math.max(0.01, Math.round(mopAmount * mopToCny * 100) / 100);
+  // 對應 HKD 金額
+  const hkdAmount = Math.round(mopAmount * mopToHkd * 100) / 100;
+  // 主幣種顯示金額（根據地域）
+  const primaryAmount = userRegion === 'hk' ? hkdAmount : userRegion === 'cn' ? cnyAmount : mopAmount;
+  const primaryCurrency = regionCurrencyLabel;
 
   // ── 支付寶 App 支付 ──
   const handleAlipayPay = async () => {
@@ -475,7 +491,9 @@ export default function IPointScreen() {
                   activeOpacity={0.7}
                 >
                   <Text style={[s.amountBtnText, active && s.amountBtnTextActive]}>{pkg.ipoint} iP</Text>
-                  <Text style={{ fontSize: 11, color: active ? APP_ORANGE : APP_GRAY, marginTop: 2 }}>MOP {pkg.ipoint}</Text>
+                  <Text style={{ fontSize: 11, color: active ? APP_ORANGE : APP_GRAY, marginTop: 2 }}>
+                    {primaryCurrency} {userRegion === 'hk' ? Math.round(pkg.ipoint * mopToHkd * 100) / 100 : userRegion === 'cn' ? Math.round(pkg.ipoint * mopToCny * 100) / 100 : pkg.ipoint}
+                  </Text>
                   {pkg.bonus > 0 ? <Text style={{ fontSize: 10, color: '#16a34a', fontWeight: '700' }}>+{pkg.bonus} iP</Text> : null}
                 </TouchableOpacity>
               );
@@ -497,8 +515,10 @@ export default function IPointScreen() {
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={s.ipointLabel}>等值金額</Text>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: APP_TEXT }}>MOP {mopAmount}</Text>
-              <Text style={{ fontSize: 11, color: APP_GRAY }}>≈ RMB {cnyAmount}（支付寶）</Text>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: APP_ORANGE }}>{primaryCurrency} {primaryAmount}</Text>
+              {userRegion === 'mo' && <Text style={{ fontSize: 11, color: APP_GRAY }}>≈ RMB {cnyAmount}（支付寶）</Text>}
+              {userRegion === 'hk' && <Text style={{ fontSize: 11, color: APP_GRAY }}>≈ MOP {mopAmount} / RMB {cnyAmount}（支付寶）</Text>}
+              {userRegion === 'cn' && <Text style={{ fontSize: 11, color: APP_GRAY }}>≈ MOP {mopAmount}</Text>}
             </View>
           </View>
 
