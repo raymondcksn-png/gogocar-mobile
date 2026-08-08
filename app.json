@@ -6,14 +6,22 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "gogocar",
+    "scheme": [
+      "gogocar",
+      "alipay2021006181630360"
+    ],
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.cryptovault852.gogocar",
       "infoPlist": {
         "NSUserNotificationUsageDescription": "GoGoCar 需要發送通知，以便及時通知您新消息和車源更新。",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationQueriesSchemes": [
+          "alipay",
+          "alipays",
+          "alipayqr"
+        ]
       }
     },
     "android": {

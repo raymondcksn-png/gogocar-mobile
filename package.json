@@ -17,6 +17,7 @@
     "@trpc/client": "^11.0.0",
     "@trpc/react-query": "^11.0.0",
     "@trpc/server": "^11.0.0",
+    "@uiw/react-native-alipay": "^5.0.2",
     "expo": "~54.0.17",
     "expo-av": "~16.0.8",
     "expo-constants": "~18.0.13",

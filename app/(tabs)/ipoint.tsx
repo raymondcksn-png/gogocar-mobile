@@ -11,6 +11,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import * as Linking from 'expo-linking';
+import Alipay from '@uiw/react-native-alipay';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { trpc, API_BASE_URL, resolveImageUrl } from '../../lib/trpc';
@@ -161,16 +162,25 @@ export default function IPointScreen() {
         ipointAmount: finalIPoint,
       });
       setOrderNo(result.orderNo);
-      // 直接調起支付寶 APP（不用 canOpenURL 前置檢查）
-      // iOS 14+ 需要 Info.plist 聲明 LSApplicationQueriesSchemes，Expo Go 不支持此查詢
-      // 直接 openURL，如果沒有安裝支付寶 APP 系統會自動提示
-      const alipayUrl = Platform.OS === 'ios'
-        ? `alipays://platformapi/startapp?saId=10000007&qrcode=${encodeURIComponent(result.orderString)}`
-        : `alipayqr://platformapi/startapp?saId=10000007&qrcode=${encodeURIComponent(result.orderString)}`;
-      await Linking.openURL(alipayUrl).catch(() => {
-        // 備用方案：嘗試通用 alipay:// scheme
-        return Linking.openURL(`alipay://platformapi/startapp?saId=10000007&qrcode=${encodeURIComponent(result.orderString)}`);
-      });
+      // 設置 iOS URL Scheme（scheme = alipay + APPID）
+      Alipay.setAlipayScheme('alipay2021006181630360');
+      // 調用原生支付寶 SDK（直接喚起支付寶 APP 付款頁面）
+      const payResult = await Alipay.alipay(result.orderString);
+      console.log('[Alipay] payResult:', JSON.stringify(payResult));
+      // 解析支付結果（resultStatus=9000 表示支付成功）
+      const resultStr = typeof payResult === 'string' ? payResult : JSON.stringify(payResult);
+      if (resultStr.includes('9000')) {
+        // 支付成功，直接跳轉成功頁
+        refetchBalance(); refetchTx(); refetchOrders();
+        setScreen('recharge-success');
+        utils.auth.me.invalidate();
+        return;
+      } else if (resultStr.includes('6001') || resultStr.includes('6002')) {
+        // 用戶取消或網絡錯誤
+        Alert.alert('提示', '支付已取消');
+        return;
+      }
+      // 其他情況進入等待確認頁（輪詢）
       setScreen('alipay-pending');
       let count = 0;
       alipayPollRef.current = setInterval(async () => {
