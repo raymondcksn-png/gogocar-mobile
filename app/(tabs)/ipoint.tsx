@@ -552,42 +552,41 @@ export default function IPointScreen() {
             </View>
           )}
 
-          <View style={s.methodItemDisabled}>
-            {/* 支付寶 — 已上線，排在微信前面 */}
-            <View style={{ borderRadius: 12, borderWidth: 2, borderColor: '#1677FF', backgroundColor: '#F0F7FF', padding: 14, marginBottom: 10 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-                <Text style={{ fontSize: 22, marginRight: 10 }}>💙</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 15, fontWeight: '600', color: '#1677FF' }}>支付寶</Text>
-                  <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>App 支付（人民幣 RMB）</Text>
-                </View>
-                <View style={{ backgroundColor: '#1677FF', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
-                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>推薦</Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                style={[{ backgroundColor: '#1677FF', borderRadius: 10, paddingVertical: 13, alignItems: 'center' }, (submitting || !finalIPoint || finalIPoint < 1) && { opacity: 0.5 }]}
-                onPress={handleAlipayPay}
-                disabled={submitting || !finalIPoint || finalIPoint < 1}
-                activeOpacity={0.85}
-              >
-                {submitting
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>支付寶支付 RMB {cnyAmount}</Text>
-                }
-              </TouchableOpacity>
-            </View>
 
-            {/* 微信支付 — 即將開通，排在支付寶後面 */}
-            <View style={s.methodItemDisabled}>
-              <Text style={s.methodIcon}>💚</Text>
+          {/* 支付寶 — 已上線，排在微信前面 */}
+          <View style={{ borderRadius: 12, borderWidth: 2, borderColor: '#1677FF', backgroundColor: '#F0F7FF', padding: 14, marginBottom: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+              <Text style={{ fontSize: 22, marginRight: 10 }}>💙</Text>
               <View style={{ flex: 1 }}>
-                <Text style={s.methodNameDisabled}>微信支付</Text>
-                <Text style={s.methodType}>APP 支付（即將開通）</Text>
+                <Text style={{ fontSize: 15, fontWeight: '600', color: '#1677FF' }}>支付寶</Text>
+                <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>App 支付（人民幣 RMB）</Text>
               </View>
-              <View style={s.comingSoonBadge}><Text style={s.comingSoonText}>即將開通</Text></View>
+              <View style={{ backgroundColor: '#1677FF', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>推薦</Text>
+              </View>
             </View>
+            <TouchableOpacity
+              style={[{ backgroundColor: '#1677FF', borderRadius: 10, paddingVertical: 13, alignItems: 'center' }, (submitting || !finalIPoint || finalIPoint < 1) && { opacity: 0.5 }]}
+              onPress={handleAlipayPay}
+              disabled={submitting || !finalIPoint || finalIPoint < 1}
+              activeOpacity={0.85}
+            >
+              {submitting
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>支付寶支付 RMB {cnyAmount}</Text>
+              }
+            </TouchableOpacity>
+          </View>
 
+          {/* 微信支付 — 即將開通，排在支付寶後面 */}
+          <View style={s.methodItemDisabled}>
+            <Text style={s.methodIcon}>💚</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.methodNameDisabled}>微信支付</Text>
+              <Text style={s.methodType}>APP 支付（即將開通）</Text>
+            </View>
+            <View style={s.comingSoonBadge}><Text style={s.comingSoonText}>即將開通</Text></View>
+          </View>
           <View style={{ height: 16 }} />
           <TouchableOpacity
             style={[s.primaryBtn, (!selectedMethod || submitting) && s.primaryBtnDisabled]}
