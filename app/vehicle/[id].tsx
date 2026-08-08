@@ -14,6 +14,7 @@ import Svg, { Path } from 'react-native-svg';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { trpc, resolveImageUrl, API_BASE_URL } from '../../lib/trpc';
 import { APP_ORANGE } from '../../constants/data';
+import { trackVehicleView } from '../../lib/analytics';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const IMG_H = Math.round(SCREEN_H * 0.40);
@@ -81,6 +82,15 @@ export default function VehicleDetailScreen() {
   useEffect(() => {
     if (isFavoritedData !== undefined) setFavorited(isFavoritedData);
   }, [isFavoritedData]);
+  // GA4 追蹤：車源詳情頁瀏覽
+  useEffect(() => {
+    if (data?.post && numId) {
+      const p = data.post as any;
+      const t = p.title || `${p.brandName || ''} ${p.modelName || ''}`.trim() || '車源';
+      const price = p.price ? Number(p.price) : undefined;
+      trackVehicleView(numId, t, price);
+    }
+  }, [data?.post]);
 
   const post = isNumericId ? data?.post : null;
   const photos = isNumericId ? (data?.photos || []) : [];

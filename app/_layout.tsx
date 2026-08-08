@@ -10,6 +10,8 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { AuthProvider } from '../contexts/AuthContext';
 import { trpc, createTRPCClient } from '../lib/trpc';
 import { initJPush, addJPushNotificationListener } from '../lib/jpush';
+import { initAnalytics, trackAppOpen } from '../lib/analytics';
+import { API_BASE_URL } from '../lib/trpc';
 
 // ── ErrorBoundary: 崩潰時顯示錯誤而不是白屏 ─────────────────────────────────
 interface ErrorBoundaryState { hasError: boolean; error: Error | null; }
@@ -62,6 +64,15 @@ export default function RootLayout() {
   useEffect(() => {
     // 初始化 JPush SDK（EAS Build 環境有效，Expo Go 靜默跳過）
     initJPush();
+    // 初始化 GA4 Analytics（從後台讀取配置）
+    fetch(`${API_BASE_URL}/api/trpc/adTracking.getPublicTrackingCodes`)
+      .then((r) => r.json())
+      .then((d) => {
+        const config = d?.result?.data?.json?.ga4Firebase || d?.result?.data?.ga4Firebase || null;
+        return initAnalytics(config);
+      })
+      .then(() => trackAppOpen())
+      .catch((e) => console.warn('[Analytics] Init failed:', e));
     // 監聽通知事件
     const cleanup = addJPushNotificationListener(
       (notification) => {
