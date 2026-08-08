@@ -5,6 +5,7 @@
  */
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import { bindJPushAlias, unbindJPushAlias } from '../lib/jpush';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface AuthUser {
@@ -72,6 +73,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ]);
       setToken(newToken);
       setUser(newUser);
+      // 綁定 JPush 別名（EAS Build 環境有效）
+      if (newUser.id) bindJPushAlias(newUser.id);
     } catch (err) {
       console.error('[AuthContext] Failed to save auth:', err);
       throw err;
@@ -99,6 +102,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Step 2: 無論 SecureStore 是否成功，都重置 React state
       setToken(null);
       setUser(null);
+      // 解綁 JPush 別名
+      unbindJPushAlias();
     }
   }, []);
 

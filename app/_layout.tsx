@@ -2,13 +2,14 @@
  * Root Layout — GoGoCar Native App
  * 加入 ErrorBoundary 顯示崩潰錯誤而不是白屏
  */
-import React, { useState, Component } from 'react';
+import React, { useState, useEffect, Component } from 'react';
 import { Stack } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { AuthProvider } from '../contexts/AuthContext';
 import { trpc, createTRPCClient } from '../lib/trpc';
+import { initJPush, addJPushNotificationListener } from '../lib/jpush';
 
 // ── ErrorBoundary: 崩潰時顯示錯誤而不是白屏 ─────────────────────────────────
 interface ErrorBoundaryState { hasError: boolean; error: Error | null; }
@@ -57,6 +58,22 @@ export default function RootLayout() {
     },
   }));
   const [trpcClient] = useState(() => createTRPCClient());
+
+  useEffect(() => {
+    // 初始化 JPush SDK（EAS Build 環境有效，Expo Go 靜默跳過）
+    initJPush();
+    // 監聽通知事件
+    const cleanup = addJPushNotificationListener(
+      (notification) => {
+        console.log('[JPush] Received:', notification.title);
+      },
+      (notification) => {
+        // 用戶點擊通知打開 APP，根據 extras 跳轉頁面
+        console.log('[JPush] Opened:', notification.title, notification.extras);
+      }
+    );
+    return cleanup;
+  }, []);
 
   return (
     <ErrorBoundary>

@@ -9,20 +9,35 @@
     "scheme": "gogocar",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.cryptovault852.gogocar"
+    "supportsTablet": true,
+    "bundleIdentifier": "com.cryptovault852.gogocar",
+    "infoPlist": {
+      "NSUserNotificationUsageDescription": "GoGoCar 需要發送通知，以便及時通知您新消息和車源更新。"
+    }
+  },
+  "android": {
+    "adaptiveIcon": {
+      "foregroundImage": "./assets/images/adaptive-icon.png",
+      "backgroundColor": "#FF6B00"
     },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#FF6B00"
-      },
-      "package": "com.cryptovault852.gogocar"
-    },
-    "plugins": [
-      "expo-router",
-      "expo-secure-store"
-    ],
+    "package": "com.cryptovault852.gogocar",
+    "permissions": [
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.VIBRATE",
+      "android.permission.POST_NOTIFICATIONS"
+    ]
+  },
+  "plugins": [
+    "expo-router",
+    "expo-secure-store",
+    [
+      "jpush-expo-config-plugin",
+      {
+        "appKey": "7323b7445409122f9d4c237b",
+        "channel": "developer-default"
+      }
+    ]
+  ],
     "experiments": {
       "typedRoutes": true
     },
