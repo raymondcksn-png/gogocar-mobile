@@ -24,7 +24,85 @@ import { useAuth } from '../../contexts/AuthContext';
 const APP_ORANGE = '#F97316';
 const SAFE_TOP = Platform.OS === 'ios' ? 44 : (StatusBar.currentHeight || 24) + 8;
 
-type TabType = 'favorites' | 'border' | 'city';
+type TabType = 'favorites' | 'border' | 'city' | 'carpark';
+
+// ── 停車場類型 ──────────────────────────────────────────────────────────────────
+type Carpark = {
+  name: string;
+  updatedAt: string;
+  carAvail: number | null;
+  carTotal: number | null;
+  motoAvail: number | null;
+  motoTotal: number | null;
+  status: string;
+};
+
+// ── Hook: 停車場實時數據（60 秒自動刷新）────────────────────────────────────────
+function useCarparkData() {
+  const [data, setData] = useState<Carpark[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/traffic/carparks`);
+      if (res.ok) {
+        const json = await res.json();
+        setData(json.carparks || []);
+        setFetchedAt(json.fetchedAt || null);
+      }
+    } catch { /* silent */ } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const t = setInterval(fetchData, 60_000);
+    return () => clearInterval(t);
+  }, [fetchData]);
+
+  return { data, loading, fetchedAt, refetch: fetchData };
+}
+
+// ── 停車場卡片 ────────────────────────────────────────────────────────────────
+function CarparkCard({ cp }: { cp: Carpark }) {
+  const statusColor = cp.status === 'full' ? '#dc2626' : cp.status === 'busy' ? '#f97316' : '#16a34a';
+  const statusText = cp.status === 'full' ? '車位已滿' : cp.status === 'busy' ? '車位緊張' : '有車位';
+  const statusBg = cp.status === 'full' ? 'rgba(220,38,38,0.1)' : cp.status === 'busy' ? 'rgba(249,115,22,0.1)' : 'rgba(22,163,74,0.1)';
+  return (
+    <View style={cp2.card}>
+      <View style={cp2.cardHeader}>
+        <Text style={cp2.name} numberOfLines={1}>{cp.name}</Text>
+        <View style={[cp2.statusBadge, { backgroundColor: statusBg }]}>
+          <Text style={[cp2.statusText, { color: statusColor }]}>{statusText}</Text>
+        </View>
+      </View>
+      <View style={cp2.stats}>
+        {cp.carAvail !== null && (
+          <View style={cp2.statItem}>
+            <Ionicons name="car-outline" size={14} color="#6b7280" />
+            <Text style={cp2.statLabel}>私家車</Text>
+            <Text style={[cp2.statNum, { color: statusColor }]}>{cp.carAvail}</Text>
+            {cp.carTotal !== null && <Text style={cp2.statTotal}>/{cp.carTotal}</Text>}
+          </View>
+        )}
+        {cp.motoAvail !== null && (
+          <View style={cp2.statItem}>
+            <Ionicons name="bicycle-outline" size={14} color="#6b7280" />
+            <Text style={cp2.statLabel}>電單車</Text>
+            <Text style={[cp2.statNum, { color: '#6b7280' }]}>{cp.motoAvail}</Text>
+            {cp.motoTotal !== null && <Text style={cp2.statTotal}>/{cp.motoTotal}</Text>}
+          </View>
+        )}
+        {cp.carAvail === null && cp.motoAvail === null && (
+          <Text style={cp2.noData}>暫無車位數據</Text>
+        )}
+      </View>
+      <Text style={cp2.time}>更新：{cp.updatedAt}</Text>
+    </View>
+  );
+}
 
 // ── 珠海擁堵狀態類型 ──────────────────────────────────────────────────────────
 type ZhuhaiCameraRoute = {
@@ -341,13 +419,25 @@ export default function BorderScreen() {
     }
   };
 
+  const carparkHook = useCarparkData();
+
+  // 進入停車場 Tab 時自動加載
+  useEffect(() => {
+    if (activeTab === 'carpark' && carparkHook.data.length === 0) {
+      carparkHook.refetch();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
   const isLoading = activeTab === 'border' ? borderQuery.isLoading
     : activeTab === 'city' ? cityQuery.isLoading
+    : activeTab === 'carpark' ? carparkHook.loading
     : favQuery.isLoading;
 
   const handleRefresh = () => {
     if (activeTab === 'border') borderQuery.refetch();
     else if (activeTab === 'city') cityQuery.refetch();
+    else if (activeTab === 'carpark') carparkHook.refetch();
     else favQuery.refetch();
   };
 
@@ -355,6 +445,7 @@ export default function BorderScreen() {
     { key: 'favorites', label: '我的收藏' },
     { key: 'border', label: '口岸通關' },
     { key: 'city', label: '市內路面' },
+    { key: 'carpark', label: '停車場' },
   ];
 
   return (
@@ -362,7 +453,7 @@ export default function BorderScreen() {
       {/* 頂部標題 */}
       <View style={[s.header, { paddingTop: SAFE_TOP }]}>
         <Text style={s.headerTitle}>實時路況</Text>
-        <Text style={s.headerSub}>澳門口岸及市內攝像頭</Text>
+        <Text style={s.headerSub}>澳門口岸、市內攝像頭及停車場</Text>
       </View>
 
       {/* Segmented Control */}
@@ -480,6 +571,28 @@ export default function BorderScreen() {
               </View>
             )
           )}
+
+          {/* 停車場 */}
+          {activeTab === 'carpark' && (
+            carparkHook.data.length === 0 ? (
+              <View style={s.emptyWrap}>
+                <Ionicons name="car-outline" size={48} color="#d1d5db" />
+                <Text style={s.emptyTitle}>暫無停車場數據</Text>
+                <Text style={s.emptySub}>下拉刷新重試</Text>
+              </View>
+            ) : (
+              <View style={cp2.list}>
+                {carparkHook.fetchedAt && (
+                  <Text style={cp2.fetchTime}>
+                    數據更新：{new Date(carparkHook.fetchedAt).toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </Text>
+                )}
+                {carparkHook.data.map((cp, i) => (
+                  <CarparkCard key={i} cp={cp} />
+                ))}
+              </View>
+            )
+          )}
         </ScrollView>
       )}
     </View>
@@ -551,4 +664,26 @@ const s = StyleSheet.create({
   emptyBig: { fontSize: 48 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#374151' },
   emptySub: { fontSize: 13, color: '#9ca3af', textAlign: 'center', paddingHorizontal: 32 },
+});
+
+// ── 停車場樣式 ────────────────────────────────────────────────────────────────
+const cp2 = StyleSheet.create({
+  list: { paddingHorizontal: 16, paddingTop: 8, gap: 8 },
+  fetchTime: { fontSize: 11, color: '#9ca3af', textAlign: 'right', marginBottom: 4 },
+  card: {
+    backgroundColor: '#fff', borderRadius: 12, padding: 12,
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 }, elevation: 1,
+  },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  name: { fontSize: 14, fontWeight: '600', color: '#1c1c1e', flex: 1, marginRight: 8 },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  statusText: { fontSize: 11, fontWeight: '700' },
+  stats: { flexDirection: 'row', gap: 16, marginBottom: 6 },
+  statItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  statLabel: { fontSize: 12, color: '#6b7280' },
+  statNum: { fontSize: 14, fontWeight: '700' },
+  statTotal: { fontSize: 11, color: '#9ca3af' },
+  noData: { fontSize: 12, color: '#9ca3af', fontStyle: 'italic' },
+  time: { fontSize: 10, color: '#9ca3af' },
 });

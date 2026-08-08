@@ -2,12 +2,13 @@
  * 切換身份頁 — 申請制（大廠標準）
  * - 個人車主：直接切換
  * - 車商：需申請（填車行名稱/牌照/聯絡人），已解鎖才能切換
- * - 駕校校長：需申請（填駕校名稱/地址/電話/聯絡人），已解鎖才能切換
+ * - 駕校校長：領取制（從 DSAT 認可學校列表選擇，填聯繫人提交），已解鎖才能切換
  */
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator,
   ScrollView, TextInput, Modal, KeyboardAvoidingView, Platform,
+  FlatList,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,10 +26,16 @@ export default function RoleSwitchScreen() {
   const router = useRouter();
   const { data: user, refetch } = trpc.auth.me.useQuery(undefined, { staleTime: 0, refetchOnMount: 'always' });
   const { data: myApps, refetch: refetchApps } = trpc.identity.myApplications.useQuery(undefined, { staleTime: 0, refetchOnMount: 'always' });
+  // 駕校領取制
+  const { data: schoolList = [] } = trpc.driving.listSchoolsForClaim.useQuery(undefined, { staleTime: 60000 });
+  const { data: myClaimedSchool, refetch: refetchClaimedSchool } = trpc.driving.myClaimedSchool.useQuery(undefined, { staleTime: 0, refetchOnMount: 'always' });
+  const [schoolSearchText, setSchoolSearchText] = useState('');
+  const [selectedSchool, setSelectedSchool] = useState<any>(null);
+  const [claimStep, setClaimStep] = useState<'list' | 'form'>('list');
+  const [claimForm, setClaimForm] = useState({ contactName: '', contactPhone: '', contactTitle: '' });
 
   const [applyModal, setApplyModal] = useState<'dealer' | 'school' | null>(null);
   const [dealerForm, setDealerForm] = useState({ dealerName: '', businessLicense: '', contactName: '', contactPhone: '', address: '' });
-  const [schoolForm, setSchoolForm] = useState({ schoolName: '', principalName: '', address: '', contactName: '', contactPhone: '' });
   const [submitting, setSubmitting] = useState(false);
 
   const setRoleTypeMut = trpc.phoneAuth.setRoleType.useMutation({
@@ -39,6 +46,14 @@ export default function RoleSwitchScreen() {
   const applyMut = trpc.identity.applyIdentity.useMutation({
     onSuccess: () => {
       setSubmitting(false); setApplyModal(null); refetchApps();
+      Alert.alert('申請已提交', '我們將在 1-3 個工作日內審核您的申請，審核結果將通過消息通知您。');
+    },
+    onError: (e: any) => { setSubmitting(false); Alert.alert('申請失敗', e.message); },
+  });
+
+  const claimMut = trpc.driving.claimSchool.useMutation({
+    onSuccess: () => {
+      setSubmitting(false); setApplyModal(null); refetchClaimedSchool();
       Alert.alert('申請已提交', '我們將在 1-3 個工作日內審核您的申請，審核結果將通過消息通知您。');
     },
     onError: (e: any) => { setSubmitting(false); Alert.alert('申請失敗', e.message); },
@@ -73,13 +88,13 @@ export default function RoleSwitchScreen() {
     applyMut.mutate({ targetRole: 'dealer', dealerName: dealerForm.dealerName.trim(), businessLicense: dealerForm.businessLicense.trim() || undefined, contactName: dealerForm.contactName.trim(), contactPhone: dealerForm.contactPhone.trim(), address: dealerForm.address.trim() });
   };
 
-  const submitSchoolApply = () => {
-    if (!schoolForm.schoolName.trim()) { Alert.alert('提示', '請填寫駕校名稱'); return; }
-    if (!schoolForm.address.trim()) { Alert.alert('提示', '請填寫駕校地址'); return; }
-    if (!schoolForm.contactName.trim()) { Alert.alert('提示', '請填寫聯絡人姓名'); return; }
-    if (!schoolForm.contactPhone.trim()) { Alert.alert('提示', '請填寫聯絡電話'); return; }
+  const submitClaimApply = () => {
+    if (!selectedSchool) { Alert.alert('提示', '請選擇學校'); return; }
+    if (!claimForm.contactName.trim()) { Alert.alert('提示', '請填寫聯繫人姓名'); return; }
+    if (!claimForm.contactPhone.trim()) { Alert.alert('提示', '請填寫聯繫電話'); return; }
+    if (!claimForm.contactTitle.trim()) { Alert.alert('提示', '請填寫職稱（如：校長/負責人）'); return; }
     setSubmitting(true);
-    applyMut.mutate({ targetRole: 'school', schoolName: schoolForm.schoolName.trim(), principalName: schoolForm.principalName.trim() || undefined, address: schoolForm.address.trim(), contactName: schoolForm.contactName.trim(), contactPhone: schoolForm.contactPhone.trim() });
+    claimMut.mutate({ schoolId: selectedSchool.id, contactName: claimForm.contactName.trim(), contactPhone: claimForm.contactPhone.trim(), contactTitle: claimForm.contactTitle.trim() });
   };
 
   return (
@@ -188,26 +203,89 @@ export default function RoleSwitchScreen() {
       </Modal>
 
       {/* 駕校申請 Modal */}
-      <Modal visible={applyModal === 'school'} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setApplyModal(null)}>
+      <Modal visible={applyModal === 'school'} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setApplyModal(null); setClaimStep('list'); setSelectedSchool(null); }}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={s.modal}>
             <View style={s.modalHeader}>
-              <TouchableOpacity onPress={() => setApplyModal(null)} style={s.backBtn}><Ionicons name="close" size={22} color={APP_TEXT} /></TouchableOpacity>
-              <Text style={s.headerTitle}>申請駕校校長認證</Text>
+              <TouchableOpacity onPress={() => { if (claimStep === 'form') { setClaimStep('list'); } else { setApplyModal(null); } }} style={s.backBtn}>
+                <Ionicons name={claimStep === 'form' ? 'chevron-back' : 'close'} size={22} color={APP_TEXT} />
+              </TouchableOpacity>
+              <Text style={s.headerTitle}>{claimStep === 'list' ? '選擇駕校' : '填寫聯繫資料'}</Text>
               <View style={{ width: 40 }} />
             </View>
-            <Text style={s.modalSub}>填寫駕校資料，提交後 1-3 個工作日內審核</Text>
-            <ScrollView style={s.modalBody} keyboardShouldPersistTaps="handled">
-              <FF label="駕校名稱" required value={schoolForm.schoolName} onChange={(v) => setSchoolForm(f => ({ ...f, schoolName: v }))} placeholder="請輸入駕校名稱" />
-              <FF label="校長姓名" value={schoolForm.principalName} onChange={(v) => setSchoolForm(f => ({ ...f, principalName: v }))} placeholder="選填" />
-              <FF label="駕校地址" required value={schoolForm.address} onChange={(v) => setSchoolForm(f => ({ ...f, address: v }))} placeholder="請輸入駕校地址" />
-              <FF label="聯絡人姓名" required value={schoolForm.contactName} onChange={(v) => setSchoolForm(f => ({ ...f, contactName: v }))} placeholder="請輸入聯絡人姓名" />
-              <FF label="聯絡電話" required value={schoolForm.contactPhone} onChange={(v) => setSchoolForm(f => ({ ...f, contactPhone: v }))} placeholder="請輸入聯絡電話" kbType="phone-pad" />
-              <View style={{ height: 24 }} />
-            </ScrollView>
+
+            {claimStep === 'list' && (
+              <>
+                <Text style={s.modalSub}>從 DSAT 認可的 {schoolList.length} 間駕校中選擇您所屬的學校</Text>
+                <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+                  <TextInput
+                    style={[s.ffInput, { marginBottom: 0 }]}
+                    value={schoolSearchText}
+                    onChangeText={setSchoolSearchText}
+                    placeholder="搜索學校名稱..."
+                    placeholderTextColor={APP_GRAY}
+                  />
+                </View>
+                <FlatList
+                  data={(schoolList as any[]).filter((s: any) =>
+                    !schoolSearchText || s.name.includes(schoolSearchText)
+                  )}
+                  keyExtractor={(item: any) => String(item.id)}
+                  renderItem={({ item }: { item: any }) => {
+                    const isClaimed = item.claimStatus === 'claimed';
+                    const isPending = item.claimStatus === 'pending';
+                    return (
+                      <TouchableOpacity
+                        style={[sc.schoolItem, isClaimed && { opacity: 0.5 }]}
+                        onPress={() => {
+                          if (isClaimed) { Alert.alert('提示', '該學校已被領取'); return; }
+                          if (isPending) { Alert.alert('提示', '該學校有待審核的申請'); return; }
+                          setSelectedSchool(item);
+                          setClaimStep('form');
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={sc.schoolName}>{item.name}</Text>
+                          {item.motorcycleCapacities && (
+                            <Text style={sc.schoolSub}>可教排量：{item.motorcycleCapacities}cc</Text>
+                          )}
+                        </View>
+                        {isClaimed && <Text style={sc.claimedBadge}>已領取</Text>}
+                        {isPending && <Text style={sc.pendingBadge}>申請中</Text>}
+                        {!isClaimed && !isPending && <Ionicons name="chevron-forward" size={16} color={APP_GRAY} />}
+                      </TouchableOpacity>
+                    );
+                  }}
+                  ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: APP_BORDER, marginHorizontal: 16 }} />}
+                />
+              </>
+            )}
+
+            {claimStep === 'form' && (
+              <>
+                <View style={sc.selectedSchoolBar}>
+                  <Ionicons name="school" size={16} color="#059669" />
+                  <Text style={sc.selectedSchoolText} numberOfLines={1}>{selectedSchool?.name}</Text>
+                </View>
+                <Text style={s.modalSub}>填寫您的聯繫資料，提交後 1-3 個工作日內審核</Text>
+                <ScrollView style={s.modalBody} keyboardShouldPersistTaps="handled">
+                  <FF label="聯繫人姓名" required value={claimForm.contactName} onChange={(v) => setClaimForm(f => ({ ...f, contactName: v }))} placeholder="請輸入姓名" />
+                  <FF label="聯繫電話" required value={claimForm.contactPhone} onChange={(v) => setClaimForm(f => ({ ...f, contactPhone: v }))} placeholder="請輸入電話" kbType="phone-pad" />
+                  <FF label="職稱" required value={claimForm.contactTitle} onChange={(v) => setClaimForm(f => ({ ...f, contactTitle: v }))} placeholder="如：校長、負責人、管理員" />
+                  <View style={{ height: 24 }} />
+                </ScrollView>
+              </>
+            )}
+
             <View style={s.modalFooter}>
-              <TouchableOpacity style={[s.submitBtn, submitting && { opacity: 0.5 }]} onPress={submitSchoolApply} disabled={submitting} activeOpacity={0.8}>
-                {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.submitBtnText}>提交申請</Text>}
+              <TouchableOpacity
+                style={[s.submitBtn, (submitting || claimStep === 'list') && { opacity: claimStep === 'list' ? 0.3 : 0.5 }]}
+                onPress={submitClaimApply}
+                disabled={submitting || claimStep === 'list'}
+                activeOpacity={0.8}
+              >
+                {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.submitBtnText}>提交領取申請</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -261,4 +339,14 @@ const s = StyleSheet.create({
   ffInput: { borderWidth: 1, borderColor: APP_BORDER, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: APP_TEXT, backgroundColor: APP_BG },
   submitBtn: { height: 52, borderRadius: 12, backgroundColor: APP_ORANGE, alignItems: 'center', justifyContent: 'center' },
   submitBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+});
+
+const sc = StyleSheet.create({
+  schoolItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff' },
+  schoolName: { fontSize: 15, fontWeight: '500', color: APP_TEXT },
+  schoolSub: { fontSize: 12, color: APP_GRAY, marginTop: 2 },
+  claimedBadge: { fontSize: 11, color: '#059669', backgroundColor: '#F0FDF4', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, overflow: 'hidden' },
+  pendingBadge: { fontSize: 11, color: '#D97706', backgroundColor: '#FFFBEB', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, overflow: 'hidden' },
+  selectedSchoolBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F0FDF4', marginHorizontal: 16, marginTop: 8, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: '#BBF7D0' },
+  selectedSchoolText: { flex: 1, fontSize: 14, fontWeight: '600', color: '#059669' },
 });
