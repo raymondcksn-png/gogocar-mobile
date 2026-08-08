@@ -31,13 +31,7 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      [
-        "jpush-expo-config-plugin/app.plugin",
-        {
-          "appKey": "9e51a43ba697aa616cc1daf2",
-          "channel": "developer-default"
-        }
-      ]
+      "./jpush.plugin.js"
     ],
     "experiments": {
       "typedRoutes": true
