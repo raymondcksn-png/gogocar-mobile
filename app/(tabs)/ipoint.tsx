@@ -18,14 +18,14 @@ import { useAuth } from '../../contexts/AuthContext';
 import { APP_ORANGE, APP_BG, APP_TEXT, APP_GRAY, APP_BORDER } from '../../constants/data';
 
 // ── 常量 ──────────────────────────────────────────────────────────────────
-// iPoint 套餐（以 iPoint 為單位，1 iP = 1 MOP）
-const PRESET_IPOINTS = [
-  { ipoint: 50,   label: '50 iP',   bonus: '' },
-  { ipoint: 100,  label: '100 iP',  bonus: '' },
-  { ipoint: 200,  label: '200 iP',  bonus: '' },
-  { ipoint: 500,  label: '500 iP',  bonus: '+20 iP' },
-  { ipoint: 1000, label: '1000 iP', bonus: '+50 iP' },
-  { ipoint: 2000, label: '2000 iP', bonus: '+150 iP' },
+// 默認套餐（後台未返回時使用）
+const DEFAULT_PACKAGES = [
+  { ipoint: 50,   bonus: 0 },
+  { ipoint: 100,  bonus: 0 },
+  { ipoint: 200,  bonus: 0 },
+  { ipoint: 500,  bonus: 20 },
+  { ipoint: 1000, bonus: 50 },
+  { ipoint: 2000, bonus: 150 },
 ];
 
 const TX_TYPE_TABS = [
@@ -126,6 +126,8 @@ export default function IPointScreen() {
   // 獲取匯率（用於顯示 RMB 等值）
   const { data: rateData } = trpc.wechatPay.getExchangeRate.useQuery(undefined, { staleTime: 5 * 60 * 1000 });
   const mopToCny = rateData?.rate ?? 0.88;
+  // 從後台讀取套餐配置（動態）
+  const packages = (rateData as any)?.packages ?? DEFAULT_PACKAGES;
 
   // 最終 iPoint 數量
   const finalIPoint = customIPoint ? Math.max(1, parseInt(customIPoint) || 1) : selectedIPoint;
@@ -463,7 +465,7 @@ export default function IPointScreen() {
         <ScrollView contentContainerStyle={s.formContent} keyboardShouldPersistTaps="handled">
           <Text style={s.sectionLabel}>選擇充值套餐</Text>
           <View style={s.amountGrid}>
-            {PRESET_IPOINTS.map((pkg) => {
+            {packages.map((pkg: any) => {
               const active = selectedIPoint === pkg.ipoint && !customIPoint;
               return (
                 <TouchableOpacity
@@ -472,9 +474,9 @@ export default function IPointScreen() {
                   onPress={() => { setSelectedIPoint(pkg.ipoint); setCustomIPoint(''); }}
                   activeOpacity={0.7}
                 >
-                  <Text style={[s.amountBtnText, active && s.amountBtnTextActive]}>{pkg.label}</Text>
+                  <Text style={[s.amountBtnText, active && s.amountBtnTextActive]}>{pkg.ipoint} iP</Text>
                   <Text style={{ fontSize: 11, color: active ? APP_ORANGE : APP_GRAY, marginTop: 2 }}>MOP {pkg.ipoint}</Text>
-                  {pkg.bonus ? <Text style={{ fontSize: 10, color: '#16a34a', fontWeight: '700' }}>{pkg.bonus}</Text> : null}
+                  {pkg.bonus > 0 ? <Text style={{ fontSize: 10, color: '#16a34a', fontWeight: '700' }}>+{pkg.bonus} iP</Text> : null}
                 </TouchableOpacity>
               );
             })}
