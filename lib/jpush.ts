@@ -30,7 +30,11 @@ export function initJPush() {
   if (!sdk) return;
 
   try {
-    sdk.initPush();
+    // Android: JPushModule.init()，iOS: JPushModule.setupWithConfig(params)
+    sdk.init({
+      appKey: '9e51a43ba697aa616cc1daf2',
+      channel: 'developer-default',
+    });
     console.log('[JPush] SDK initialized');
 
     // 申請通知權限（iOS）
@@ -52,16 +56,16 @@ export function bindJPushAlias(userId: number) {
 
   const alias = `user_${userId}`;
   try {
-    sdk.setAlias(
-      { sequence: 1, alias },
-      (result: any) => {
-        if (result.errorCode === 0) {
-          console.log(`[JPush] Alias bound: ${alias}`);
-        } else {
-          console.warn(`[JPush] Alias bind failed: ${result.errorCode}`);
-        }
+    // 先添加 TagAlias 監聽器再設置別名
+    sdk.addTagAliasListener((result: any) => {
+      if (result.errorCode === 0) {
+        console.log(`[JPush] Alias operation success: sequence=${result.sequence}`);
+      } else {
+        console.warn(`[JPush] Alias operation failed: errorCode=${result.errorCode}`);
       }
-    );
+    });
+    sdk.setAlias({ sequence: Date.now(), alias });
+    console.log(`[JPush] setAlias called: ${alias}`);
   } catch (e) {
     console.error('[JPush] setAlias failed:', e);
   }
@@ -75,9 +79,8 @@ export function unbindJPushAlias() {
   if (!sdk) return;
 
   try {
-    sdk.deleteAlias({ sequence: 2 }, (result: any) => {
-      console.log('[JPush] Alias unbound');
-    });
+    sdk.deleteAlias({ sequence: Date.now() });
+    console.log('[JPush] deleteAlias called');
   } catch (e) {
     console.error('[JPush] deleteAlias failed:', e);
   }
@@ -95,28 +98,28 @@ export function addJPushNotificationListener(
   if (!sdk) return () => {};
 
   try {
-    // 收到通知（APP 在前台）
-    sdk.addReceiveNotificationListener((result: any) => {
+    // 收到通知（APP 在前台或後台）
+    const receiveCallback = (result: any) => {
       onReceive({
         title: result.title || '',
         content: result.content || result.alert || '',
         extras: result.extras || {},
       });
-    });
-
-    // 點擊通知（APP 在後台或被殺死）
-    sdk.addReceiveOpenNotificationListener((result: any) => {
+    };
+    // 點擊通知打開 APP
+    const openCallback = (result: any) => {
       onOpen({
         title: result.title || '',
         content: result.content || result.alert || '',
         extras: result.extras || {},
       });
-    });
-
+    };
+    sdk.addNotificationListener(receiveCallback);
+    sdk.addNotificationListener(openCallback);
     return () => {
       try {
-        sdk.removeReceiveNotificationListener();
-        sdk.removeReceiveOpenNotificationListener();
+        sdk.removeListener(receiveCallback);
+        sdk.removeListener(openCallback);
       } catch (e) {}
     };
   } catch (e) {
@@ -136,7 +139,9 @@ export function getJPushRegistrationId(): Promise<string | null> {
   return new Promise((resolve) => {
     try {
       sdk.getRegistrationID((result: any) => {
-        resolve(result.registerID || null);
+        const regId = result.registerID || result.registrationID || null;
+        console.log('[JPush] Registration ID:', regId);
+        resolve(regId);
       });
     } catch (e) {
       resolve(null);
